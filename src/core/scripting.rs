@@ -1,5 +1,7 @@
 // src/core/scripting.rs
+#![allow(dead_code)]
 
+use crate::core::ecs::EngineState;
 use bevy::ecs::component::{ComponentDescriptor, ComponentId, StorageType};
 use bevy::prelude::*;
 use bevy::ptr::OwningPtr;
@@ -33,7 +35,22 @@ impl Plugin for ScriptingPlugin {
         // Lua is !Send, so we must use insert_non_send_resource
         app.insert_non_send_resource(ScriptingRuntime { lua })
             .insert_resource(string_pool)
-            .insert_resource(SchemaRegistry { schemas: HashMap::new() });
+            .insert_resource(SchemaRegistry { schemas: HashMap::new() })
+            .add_systems(OnEnter(EngineState::Running), run_initial_script);
+    }
+}
+
+fn run_initial_script(runtime: NonSend<ScriptingRuntime>) {
+    let script_path = "assets/scripts/init.luau";
+    match std::fs::read_to_string(script_path) {
+        Ok(content) => {
+            if let Err(e) = runtime.lua.load(&content).exec() {
+                error!("Failed to execute initial Luau script: {:?}", e);
+            }
+        }
+        Err(e) => {
+            error!("Failed to read initial script at {}: {:?}", script_path, e);
+        }
     }
 }
 
