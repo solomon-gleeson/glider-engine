@@ -1,4 +1,3 @@
-
 #[cfg(feature = "render")]
 pub mod assets;
 pub mod ecs;
