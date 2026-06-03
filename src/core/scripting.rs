@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![expect(unused)]
 #![expect(
     unsafe_code,
     reason = "Unsafe code is needed to work with dynamic components"
