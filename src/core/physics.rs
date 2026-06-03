@@ -19,29 +19,23 @@ pub struct Player;
 
 fn setup_physics_test(mut commands: Commands, assets: Res<EngineAssets>) {
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: Color::srgb(0.3, 0.5, 0.3),
-                custom_size: Some(Vec2::new(800.0, 50.0)),
-                ..default()
-            },
-            transform: Transform::from_xyz(0.0, -200.0, 0.0),
+        Sprite {
+            color: Color::srgb(0.3, 0.5, 0.3),
+            custom_size: Some(Vec2::new(800.0, 50.0)),
             ..default()
         },
+        Transform::from_xyz(0.0, -200.0, 0.0),
         RigidBody::Static,
         Collider::rectangle(800.0, 50.0),
     ));
 
     commands.spawn((
-        SpriteBundle {
-            texture: assets.placeholder_texture.clone(),
-            sprite: Sprite {
-                custom_size: Some(Vec2::new(50.0, 50.0)),
-                ..default()
-            },
-            transform: Transform::from_xyz(0.0, 200.0, 0.0),
+        Sprite {
+            custom_size: Some(Vec2::new(50.0, 50.0)),
+            image: assets.placeholder_texture.clone(),
             ..default()
         },
+        Transform::from_xyz(0.0, 200.0, 0.0),
         RigidBody::Dynamic,
         Collider::rectangle(50.0, 50.0),
         LockedAxes::ROTATION_LOCKED,

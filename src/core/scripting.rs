@@ -1,17 +1,20 @@
 #![allow(dead_code)]
 
 use crate::core::ecs::EngineState;
-use bevy::ecs::component::{ComponentDescriptor, ComponentId, StorageType};
-use bevy::prelude::*;
-use bevy::ptr::OwningPtr;
+use bevy::{
+    ecs::component::{ComponentCloneBehavior, ComponentDescriptor, ComponentId, StorageType},
+    prelude::*,
+    ptr::OwningPtr,
+};
 use lasso::{Rodeo, Spur};
-use mluau::prelude::*;
-use mluau::{RegistryKey, Value, Vector};
+use mluau::{prelude::*, RegistryKey, Value, Vector};
 use smallvec::SmallVec;
-use std::alloc::Layout;
-use std::collections::{hash_map::Entry, HashMap};
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::ptr::NonNull;
+use std::{
+    alloc::Layout,
+    collections::{hash_map::Entry, HashMap},
+    hash::{DefaultHasher, Hash, Hasher},
+    ptr::NonNull,
+};
 
 pub struct ScriptingPlugin;
 
@@ -82,9 +85,9 @@ impl EngineStringPool {
     pub fn register_lua_string(&mut self, lua: &Lua, s: &LuaString) -> Option<Spur> {
         let borrowed = s.to_str().ok()?;
         let spur = self.rodeo.get_or_intern(&*borrowed);
-        if !self.bridge.contains_key(&spur) {
+        if let Entry::Vacant(e) = self.bridge.entry(spur) {
             if let Ok(key) = lua.create_registry_value(s.clone()) {
-                self.bridge.insert(spur, key);
+                e.insert(key);
             }
         }
         Some(spur)
@@ -193,10 +196,13 @@ impl SchemaRegistry {
                 StorageType::Table,
                 schema.layout,
                 None, // Dynamic components don't have a drop fn in this model
+                true,
+                ComponentCloneBehavior::Ignore,
+                None,
             )
         };
         self.schemas.insert(schema.name.clone(), schema);
-        world.init_component_with_descriptor(descriptor)
+        world.register_component_with_descriptor(descriptor)
     }
 
     pub fn get(&self, schema_name: &str) -> Option<&DynamicComponentSchema> {

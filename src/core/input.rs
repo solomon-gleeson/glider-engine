@@ -30,7 +30,7 @@ fn player_movement(
         let max_distance = 26.0;
         let filter = SpatialQueryFilter::from_excluded_entities([entity]);
         let is_grounded = spatial_query
-            .cast_ray(ray_origin, ray_direction, max_distance, true, filter)
+            .cast_ray(ray_origin, ray_direction, max_distance, true, &filter)
             .is_some();
 
         if keyboard_input.pressed(KeyCode::KeyA) || keyboard_input.pressed(KeyCode::ArrowLeft) {
