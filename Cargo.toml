@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.14"
-avian2d = "0.1"
-mluau = { git = "https://github.com/mluau/mluau", features = ["luau", "vendored"] }
+bevy = "0.18.1"
+avian2d = "0.6.1"
+mluau = { git = "https://github.com/mluau/mluau" }
 lasso = "0.7"
 smallvec = "1.13"
