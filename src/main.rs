@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 use bevy::prelude::*;
 
 mod core;
