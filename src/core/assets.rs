@@ -39,8 +39,10 @@ fn check_loading_progress(
             }
             LoadState::Failed(error) => {
                 error!("Failed to load the requested asset: {:?}", error);
-            }_ => {
+                // Fallback to Running even if assets fail, to prevent system lockup from log spam
+                next_state.set(EngineState::Running);
             }
+            _ => {}
         }
     }
 }
