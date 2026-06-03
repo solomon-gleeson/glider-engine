@@ -47,6 +47,10 @@ impl EngineStringPool {
             .or_insert_with(|| lua.create_registry_value(s.clone()).unwrap());
         Some(spur)
     }
+
+    pub fn dual_register_string(&mut self, lua: &Lua, s: &str) -> Option<Spur> {
+        self.register_lua_string(lua, &lua.create_string(s).unwrap())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -258,5 +262,60 @@ impl DynamicComponentBridge {
         }
 
         Ok(Some(table))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f64;
+
+    use super::*;
+
+    #[test]
+    fn test_insert_extract_roundtrip() {
+        let lua = Lua::new();
+        let mut world = World::new();
+
+        let mut pool = EngineStringPool {
+            rodeo: Rodeo::new(),
+            bridge: HashMap::new(),
+        };
+
+        let mut registry = SchemaRegistry::default();
+
+        let fields = vec![
+            (
+                pool.dual_register_string(&lua, "a").unwrap(),
+                LuauFieldType::Integer,
+            ),
+            (
+                pool.dual_register_string(&lua, "b").unwrap(),
+                LuauFieldType::Number,
+            ),
+        ];
+
+        let id = registry.register(&mut world, "Test".into(), &fields);
+
+        let entity = world.spawn_empty().id();
+
+        let table = lua.create_table().unwrap();
+        table.set("a", 42i64).unwrap();
+        table.set("b", f64::consts::PI).unwrap();
+
+        unsafe {
+            DynamicComponentBridge::insert_from_table(
+                &mut world, entity, id, &registry, &mut pool, &table, &lua,
+            )
+            .unwrap();
+
+            let out = DynamicComponentBridge::extract_to_table(
+                &world, entity, id, &registry, &pool, &lua,
+            )
+            .unwrap()
+            .unwrap();
+
+            assert_eq!(out.get::<i64>("a").unwrap(), 42);
+            assert!((out.get::<f64>("b").unwrap() - f64::consts::PI).abs() < 1e-6);
+        }
     }
 }
