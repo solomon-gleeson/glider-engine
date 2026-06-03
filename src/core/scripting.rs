@@ -1,60 +1,21 @@
 #![allow(dead_code)]
 
-use crate::core::ecs::EngineState;
 use bevy::{
     ecs::component::{ComponentCloneBehavior, ComponentDescriptor, ComponentId, StorageType},
     prelude::*,
     ptr::OwningPtr,
 };
 use lasso::{Rodeo, Spur};
-use mluau::{prelude::*, RegistryKey, Value, Vector};
-use smallvec::SmallVec;
-use std::{
-    alloc::Layout,
-    collections::{hash_map::Entry, HashMap},
-    hash::{DefaultHasher, Hash, Hasher},
-    ptr::NonNull,
-};
+use mluau::prelude::*;
+use std::{alloc::Layout, collections::HashMap, ptr::NonNull};
 
 pub struct ScriptingPlugin;
 
 impl Plugin for ScriptingPlugin {
     fn build(&self, app: &mut App) {
-        let string_pool = EngineStringPool {
-            rodeo: Rodeo::new(),
-            bridge: HashMap::new(),
-        };
-
-        let lua = Lua::new();
-
-        let print_from_rust = lua
-            .create_function(|_, msg: String| {
-                info!("[Luau]: {}", msg);
-                Ok(())
-            })
-            .unwrap();
-        lua.globals().set("info", print_from_rust).unwrap();
-
-        app.insert_non_send_resource(ScriptingRuntime { lua })
-            .insert_resource(string_pool)
-            .insert_resource(SchemaRegistry {
-                schemas: HashMap::new(),
-            })
-            .add_systems(OnEnter(EngineState::Running), run_initial_script);
-    }
-}
-
-fn run_initial_script(runtime: NonSend<ScriptingRuntime>) {
-    let script_path = "assets/scripts/init.luau";
-    match std::fs::read_to_string(script_path) {
-        Ok(content) => {
-            if let Err(e) = runtime.lua.load(&content).exec() {
-                error!("Failed to execute initial Luau script: {:?}", e);
-            }
-        }
-        Err(e) => {
-            error!("Failed to read initial script at {}: {:?}", script_path, e);
-        }
+        app.insert_non_send(ScriptingRuntime { lua: Lua::new() })
+            .init_resource::<EngineStringPool>()
+            .init_resource::<SchemaRegistry>();
     }
 }
 
@@ -62,55 +23,29 @@ pub struct ScriptingRuntime {
     pub lua: Lua,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct EngineStringPool {
     pub rodeo: Rodeo,
-    pub bridge: HashMap<Spur, RegistryKey>,
+    pub bridge: HashMap<Spur, LuaRegistryKey>,
 }
 
 impl EngineStringPool {
-    pub fn register_string(&mut self, lua: &Lua, text: &str) -> LuaResult<Spur> {
-        let spur = self.rodeo.get_or_intern(text);
-        match self.bridge.entry(spur) {
-            Entry::Occupied(_) => {}
-            Entry::Vacant(entry) => {
-                let lua_string = lua.create_string(text)?;
-                let key = lua.create_registry_value(lua_string)?;
-                entry.insert(key);
-            }
-        }
-        Ok(spur)
+    pub fn get_lua_str(&self, lua: &Lua, spur: Spur) -> LuaString {
+        let key = self.bridge.get(&spur).expect("unregistered spur");
+        lua.registry_value(key).expect("failed to retrieve string")
     }
 
     pub fn register_lua_string(&mut self, lua: &Lua, s: &LuaString) -> Option<Spur> {
         let borrowed = s.to_str().ok()?;
         let spur = self.rodeo.get_or_intern(&*borrowed);
-        if let Entry::Vacant(e) = self.bridge.entry(spur) {
-            if let Ok(key) = lua.create_registry_value(s.clone()) {
-                e.insert(key);
-            }
-        }
+        self.bridge
+            .entry(spur)
+            .or_insert_with(|| lua.create_registry_value(s.clone()).unwrap());
         Some(spur)
     }
-
-    #[inline]
-    pub fn get_lua_str(&self, lua: &Lua, spur: Spur) -> LuaString {
-        let key = self.bridge.get(&spur).expect("unregistered spur");
-        lua.registry_value(key)
-            .expect("failed to retrieve registry string")
-    }
 }
 
-pub enum LuauFrameIr {
-    Bool(bool),
-    Integer(i64),
-    Number(f64),
-    Vector3([f32; 3]),
-    String(Spur),
-    Buffer(Vec<u8>),
-}
-
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LuauFieldType {
     Bool,
     Integer,
@@ -138,11 +73,21 @@ pub struct DynamicComponentSchema {
     pub name: String,
     pub fields: HashMap<Spur, (usize, LuauFieldType)>,
     pub layout: Layout,
-    pub signature: u64,
 }
 
-impl DynamicComponentSchema {
-    pub fn build(name: String, fields: &[(Spur, LuauFieldType)]) -> Self {
+#[derive(Resource, Default)]
+pub struct SchemaRegistry {
+    pub name_to_id: HashMap<String, ComponentId>,
+    pub id_to_schema: HashMap<ComponentId, DynamicComponentSchema>,
+}
+
+impl SchemaRegistry {
+    pub fn register(
+        &mut self,
+        world: &mut World,
+        name: String,
+        fields: &[(Spur, LuauFieldType)],
+    ) -> ComponentId {
         let mut struct_layout = Layout::from_size_align(0, 1).unwrap();
         let mut field_offsets = HashMap::new();
         let mut sorted = fields.to_vec();
@@ -153,183 +98,142 @@ impl DynamicComponentSchema {
             struct_layout = new_layout;
             field_offsets.insert(*spur, (offset, *field_type));
         }
-
         let layout = struct_layout.pad_to_align();
-        let signature = Self::compute_signature(fields);
 
-        Self {
-            name,
+        let schema = DynamicComponentSchema {
+            name: name.clone(),
             fields: field_offsets,
             layout,
-            signature,
-        }
-    }
+        };
 
-    pub fn compute_signature(fields: &[(Spur, LuauFieldType)]) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        let mut sorted = fields.to_vec();
-        sorted.sort_by_key(|(spur, _)| *spur);
-        for (spur, ty) in sorted {
-            spur.hash(&mut hasher);
-            std::mem::discriminant(&ty).hash(&mut hasher);
-            if let LuauFieldType::Buffer(n) = ty {
-                n.hash(&mut hasher)
-            }
-        }
-        hasher.finish()
-    }
-}
-
-#[derive(Resource)]
-pub struct SchemaRegistry {
-    pub schemas: HashMap<String, DynamicComponentSchema>,
-}
-
-impl SchemaRegistry {
-    pub fn register(&mut self, world: &mut World, schema: DynamicComponentSchema) -> ComponentId {
         let descriptor = unsafe {
             ComponentDescriptor::new_with_layout(
-                schema.name.clone(),
+                name.clone(),
                 StorageType::Table,
-                schema.layout,
-                None, // Dynamic components don't have a drop fn in this model
+                layout,
+                None,
                 true,
                 ComponentCloneBehavior::Ignore,
                 None,
             )
         };
-        self.schemas.insert(schema.name.clone(), schema);
-        world.register_component_with_descriptor(descriptor)
-    }
 
-    pub fn get(&self, schema_name: &str) -> Option<&DynamicComponentSchema> {
-        self.schemas.get(schema_name)
+        let id = world.register_component_with_descriptor(descriptor);
+        self.name_to_id.insert(name, id);
+        self.id_to_schema.insert(id, schema);
+        id
     }
 }
 
-pub unsafe fn insert_luau_data(
-    world: &mut World,
-    entity: Entity,
-    component_id: ComponentId,
-    registry: &SchemaRegistry,
-    schema_name: &str,
-    data: &LuauFrameIrLayout,
-) {
-    let schema = registry.get(schema_name).expect("Schema not registered");
+pub struct DynamicComponentBridge;
 
-    let scratch_ptr = std::alloc::alloc_zeroed(schema.layout);
-    if scratch_ptr.is_null() {
-        std::alloc::handle_alloc_error(schema.layout);
-    }
-
-    for (spur, val) in &data.fields {
-        if let Some(&(offset, field_type)) = schema.fields.get(spur) {
-            let field_ptr = scratch_ptr.add(offset);
-            match val {
-                LuauFrameIr::Bool(b) => {
-                    if matches!(field_type, LuauFieldType::Bool) {
-                        std::ptr::write(field_ptr as *mut bool, *b);
-                    }
-                }
-                LuauFrameIr::Integer(i) => {
-                    if matches!(field_type, LuauFieldType::Integer) {
-                        std::ptr::write(field_ptr as *mut i64, *i);
-                    }
-                }
-                LuauFrameIr::Number(n) => {
-                    if matches!(field_type, LuauFieldType::Number) {
-                        std::ptr::write(field_ptr as *mut f64, *n);
-                    }
-                }
-                LuauFrameIr::Vector3(v) => {
-                    if matches!(field_type, LuauFieldType::Vector3) {
-                        std::ptr::write(field_ptr as *mut [f32; 3], *v);
-                    }
-                }
-                LuauFrameIr::String(s) => {
-                    if matches!(field_type, LuauFieldType::String) {
-                        std::ptr::write(field_ptr as *mut Spur, *s);
-                    }
-                }
-                LuauFrameIr::Buffer(buf) => {
-                    if let LuauFieldType::Buffer(len) = field_type {
-                        let copy_len = buf.len().min(len);
-                        std::ptr::copy_nonoverlapping(buf.as_ptr(), field_ptr, copy_len);
-                    }
-                }
-            }
-        }
-    }
-
-    let non_null = NonNull::new(scratch_ptr).unwrap();
-    let owning_ptr = OwningPtr::new(non_null);
-
-    world
-        .entity_mut(entity)
-        .insert_by_id(component_id, owning_ptr);
-
-    // FIXED THIS LEAK PIZZA: Free transient allocation now that Bevy copied it to table column
-    std::alloc::dealloc(scratch_ptr, schema.layout);
-}
-
-pub struct LuauFrameIrLayout {
-    pub fields: SmallVec<[(Spur, LuauFrameIr); 8]>,
-}
-
-impl LuauFrameIrLayout {
-    pub fn write_to_table(
-        &self,
-        _lua: &Lua,
+impl DynamicComponentBridge {
+    pub unsafe fn insert_from_table(
+        world: &mut World,
+        entity: Entity,
+        component_id: ComponentId,
+        registry: &SchemaRegistry,
+        pool: &mut EngineStringPool,
         table: &LuaTable,
-        pool: &EngineStringPool,
+        lua: &Lua,
     ) -> LuaResult<()> {
-        for (key_spur, val) in &self.fields {
-            let lua_key = pool.get_lua_str(_lua, *key_spur);
-            match val {
-                LuauFrameIr::Bool(b) => table.raw_set(lua_key, *b)?,
-                LuauFrameIr::Integer(i) => table.raw_set(lua_key, *i)?,
-                LuauFrameIr::Number(n) => table.raw_set(lua_key, *n)?,
-                LuauFrameIr::String(s) => table.raw_set(lua_key, pool.get_lua_str(_lua, *s))?,
-                LuauFrameIr::Vector3([x, y, z]) => {
-                    table.raw_set(lua_key, Vector::new(*x, *y, *z))?
+        let schema = registry
+            .id_to_schema
+            .get(&component_id)
+            .expect("Schema not registered");
+
+        let u64_count = schema.layout.size().div_ceil(8);
+        let mut scratch = vec![0u64; u64_count];
+        let scratch_ptr = scratch.as_mut_ptr() as *mut u8;
+
+        for (&spur, &(offset, field_type)) in &schema.fields {
+            let lua_key = pool.get_lua_str(lua, spur);
+            let field_ptr = scratch_ptr.add(offset);
+
+            match (table.raw_get::<LuaValue>(lua_key)?, field_type) {
+                (LuaValue::Boolean(b), LuauFieldType::Bool) => {
+                    std::ptr::write(field_ptr as *mut bool, b)
+                }
+                (LuaValue::Integer(i), LuauFieldType::Integer) => {
+                    std::ptr::write(field_ptr as *mut i64, i)
+                }
+                (LuaValue::Number(n), LuauFieldType::Number) => {
+                    std::ptr::write(field_ptr as *mut f64, n)
+                }
+                (LuaValue::Vector(v), LuauFieldType::Vector3) => {
+                    std::ptr::write(field_ptr as *mut [f32; 3], [v.x(), v.y(), v.z()])
+                }
+                (LuaValue::String(s), LuauFieldType::String) => {
+                    if let Some(str_spur) = pool.register_lua_string(lua, &s) {
+                        std::ptr::write(field_ptr as *mut Spur, str_spur);
+                    }
+                }
+                (LuaValue::Buffer(b), LuauFieldType::Buffer(len)) => {
+                    std::ptr::copy_nonoverlapping(
+                        b.to_pointer() as *mut u8,
+                        field_ptr,
+                        b.len().min(len),
+                    );
                 }
                 _ => {}
             }
         }
+
+        let owning_ptr = OwningPtr::new(NonNull::new(scratch_ptr).unwrap());
+        world
+            .entity_mut(entity)
+            .insert_by_id(component_id, owning_ptr);
+
         Ok(())
     }
 
-    pub fn read_from_table(
+    pub unsafe fn extract_to_table(
+        world: &World,
+        entity: Entity,
+        component_id: ComponentId,
+        registry: &SchemaRegistry,
+        pool: &EngineStringPool,
         lua: &Lua,
-        table: &LuaTable,
-        schema: &[Spur],
-        pool: &mut EngineStringPool,
-    ) -> LuaResult<Self> {
-        let mut fields = SmallVec::new();
-        for &key_spur in schema {
-            let key = pool.get_lua_str(lua, key_spur);
-            match table.raw_get::<Value>(key)? {
-                Value::Boolean(b) => fields.push((key_spur, LuauFrameIr::Bool(b))),
-                Value::Integer(i) => fields.push((key_spur, LuauFrameIr::Integer(i))),
-                Value::Number(n) => fields.push((key_spur, LuauFrameIr::Number(n))),
-                Value::String(s) => {
-                    // FIX: Dynamically register unexpected strings created on runtime heap
-                    if let Some(spur) = pool.register_lua_string(lua, &s) {
-                        fields.push((key_spur, LuauFrameIr::String(spur)));
-                    }
+    ) -> LuaResult<Option<LuaTable>> {
+        let Some(schema) = registry.id_to_schema.get(&component_id) else {
+            return Ok(None);
+        };
+        let Ok(ptr) = world.entity(entity).get_by_id(component_id) else {
+            return Ok(None);
+        };
+
+        let raw_ptr = ptr.as_ptr();
+        let table = lua.create_table()?;
+
+        for (&spur, &(offset, field_type)) in &schema.fields {
+            let lua_key = pool.get_lua_str(lua, spur);
+            let field_ptr = raw_ptr.add(offset);
+
+            match field_type {
+                LuauFieldType::Bool => {
+                    table.raw_set(lua_key, std::ptr::read(field_ptr as *const bool))?
                 }
-                Value::Vector(vector) => {
-                    fields.push((
-                        key_spur,
-                        LuauFrameIr::Vector3([vector.x(), vector.y(), vector.z()]),
-                    ));
+                LuauFieldType::Integer => {
+                    table.raw_set(lua_key, std::ptr::read(field_ptr as *const i64))?
                 }
-                Value::Buffer(b) => {
-                    fields.push((key_spur, LuauFrameIr::Buffer(b.to_vec())));
+                LuauFieldType::Number => {
+                    table.raw_set(lua_key, std::ptr::read(field_ptr as *const f64))?
                 }
-                _ => {}
+                LuauFieldType::Vector3 => {
+                    let v = std::ptr::read(field_ptr as *const [f32; 3]);
+                    table.raw_set(lua_key, mluau::Vector::new(v[0], v[1], v[2]))?;
+                }
+                LuauFieldType::String => {
+                    let str_spur = std::ptr::read(field_ptr as *const Spur);
+                    table.raw_set(lua_key, pool.get_lua_str(lua, str_spur))?;
+                }
+                LuauFieldType::Buffer(len) => {
+                    let slice = std::slice::from_raw_parts(field_ptr, len);
+                    table.raw_set(lua_key, lua.create_buffer(slice)?)?;
+                }
             }
         }
-        Ok(Self { fields })
+
+        Ok(Some(table))
     }
 }
