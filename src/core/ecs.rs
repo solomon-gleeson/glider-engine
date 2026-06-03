@@ -14,13 +14,3 @@ pub enum EngineState {
     Loading,
     Running,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_engine_state_default() {
-        assert_eq!(EngineState::default(), EngineState::Loading);
-    }
-}

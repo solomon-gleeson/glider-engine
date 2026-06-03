@@ -1,1 +1,1 @@
-info("Hello from the Glider Engine Luau environment!")
+info("I hate Rust said the guy coding luau from the Glider Engine Luau environment!")

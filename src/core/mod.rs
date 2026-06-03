@@ -1,10 +1,9 @@
-// src/core/mod.rs
-
-pub mod ecs;
 pub mod assets;
-pub mod physics;
+pub mod ecs;
 pub mod input;
-pub mod scripting; // Expose module
+pub mod physics;
+pub mod renderer;
+pub mod scripting;
 
 use bevy::prelude::*;
 
@@ -17,7 +16,8 @@ impl Plugin for CorePlugin {
             assets::AssetsPlugin,
             physics::PhysicsPlugin,
             input::InputPlugin,
-            scripting::ScriptingPlugin, // Attach the high-speed engine VM
+            scripting::ScriptingPlugin,
+            renderer::RendererPlugin,
         ));
     }
 }

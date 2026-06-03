@@ -1,4 +1,3 @@
-// src/core/scripting.rs
 #![allow(dead_code)]
 
 use crate::core::ecs::EngineState;
@@ -9,10 +8,10 @@ use lasso::{Rodeo, Spur};
 use mluau::prelude::*;
 use mluau::{RegistryKey, Value, Vector};
 use smallvec::SmallVec;
-use std::hash::{Hash, Hasher, DefaultHasher};
-use std::ptr::NonNull;
 use std::alloc::Layout;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{hash_map::Entry, HashMap};
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::ptr::NonNull;
 
 pub struct ScriptingPlugin;
 
@@ -25,17 +24,19 @@ impl Plugin for ScriptingPlugin {
 
         let lua = Lua::new();
 
-        // Bind custom engine logging to Luau environment
-        let print_from_rust = lua.create_function(|_, msg: String| {
-            info!("[Luau]: {}", msg);
-            Ok(())
-        }).unwrap();
+        let print_from_rust = lua
+            .create_function(|_, msg: String| {
+                info!("[Luau]: {}", msg);
+                Ok(())
+            })
+            .unwrap();
         lua.globals().set("info", print_from_rust).unwrap();
 
-        // Lua is !Send, so we must use insert_non_send_resource
         app.insert_non_send_resource(ScriptingRuntime { lua })
             .insert_resource(string_pool)
-            .insert_resource(SchemaRegistry { schemas: HashMap::new() })
+            .insert_resource(SchemaRegistry {
+                schemas: HashMap::new(),
+            })
             .add_systems(OnEnter(EngineState::Running), run_initial_script);
     }
 }
@@ -61,7 +62,6 @@ pub struct ScriptingRuntime {
 #[derive(Resource)]
 pub struct EngineStringPool {
     pub rodeo: Rodeo,
-    // We store the strings as RegistryKeys to keep them interned in Lua memory across frames
     pub bridge: HashMap<Spur, RegistryKey>,
 }
 
@@ -93,7 +93,8 @@ impl EngineStringPool {
     #[inline]
     pub fn get_lua_str(&self, lua: &Lua, spur: Spur) -> LuaString {
         let key = self.bridge.get(&spur).expect("unregistered spur");
-        lua.registry_value(key).expect("failed to retrieve registry string")
+        lua.registry_value(key)
+            .expect("failed to retrieve registry string")
     }
 }
 
@@ -156,7 +157,12 @@ impl DynamicComponentSchema {
         let layout = struct_layout.pad_to_align();
         let signature = Self::compute_signature(fields);
 
-        Self { name, fields: field_offsets, layout, signature }
+        Self {
+            name,
+            fields: field_offsets,
+            layout,
+            signature,
+        }
     }
 
     pub fn compute_signature(fields: &[(Spur, LuauFieldType)]) -> u64 {
@@ -186,7 +192,7 @@ impl SchemaRegistry {
                 schema.name.clone(),
                 StorageType::Table,
                 schema.layout,
-                None, // Dynamic components don't have a drop fn in this simplified model
+                None, // Dynamic components don't have a drop fn in this model
             )
         };
         self.schemas.insert(schema.name.clone(), schema);
@@ -217,15 +223,41 @@ pub unsafe fn insert_luau_data(
         if let Some(&(offset, field_type)) = schema.fields.get(spur) {
             let field_ptr = scratch_ptr.add(offset);
             match val {
-                LuauFrameIr::Bool(b) => if matches!(field_type, LuauFieldType::Bool) { std::ptr::write(field_ptr as *mut bool, *b); },
-                LuauFrameIr::Integer(i) => if matches!(field_type, LuauFieldType::Integer) { std::ptr::write(field_ptr as *mut i64, *i); },
-                LuauFrameIr::Number(n) => if matches!(field_type, LuauFieldType::Number) { std::ptr::write(field_ptr as *mut f64, *n); },
-                LuauFrameIr::Vector3(v) => if matches!(field_type, LuauFieldType::Vector3) { std::ptr::write(field_ptr as *mut [f32; 3], *v); },
-                LuauFrameIr::Vector4(v) => if matches!(field_type, LuauFieldType::Vector4) { std::ptr::write(field_ptr as *mut [f32; 4], *v); },
-                LuauFrameIr::String(s) => if matches!(field_type, LuauFieldType::String) { std::ptr::write(field_ptr as *mut Spur, *s); },
-                LuauFrameIr::Buffer(buf) => if let LuauFieldType::Buffer(len) = field_type {
-                    let copy_len = buf.len().min(len);
-                    std::ptr::copy_nonoverlapping(buf.as_ptr(), field_ptr, copy_len);
+                LuauFrameIr::Bool(b) => {
+                    if matches!(field_type, LuauFieldType::Bool) {
+                        std::ptr::write(field_ptr as *mut bool, *b);
+                    }
+                }
+                LuauFrameIr::Integer(i) => {
+                    if matches!(field_type, LuauFieldType::Integer) {
+                        std::ptr::write(field_ptr as *mut i64, *i);
+                    }
+                }
+                LuauFrameIr::Number(n) => {
+                    if matches!(field_type, LuauFieldType::Number) {
+                        std::ptr::write(field_ptr as *mut f64, *n);
+                    }
+                }
+                LuauFrameIr::Vector3(v) => {
+                    if matches!(field_type, LuauFieldType::Vector3) {
+                        std::ptr::write(field_ptr as *mut [f32; 3], *v);
+                    }
+                }
+                LuauFrameIr::Vector4(v) => {
+                    if matches!(field_type, LuauFieldType::Vector4) {
+                        std::ptr::write(field_ptr as *mut [f32; 4], *v);
+                    }
+                }
+                LuauFrameIr::String(s) => {
+                    if matches!(field_type, LuauFieldType::String) {
+                        std::ptr::write(field_ptr as *mut Spur, *s);
+                    }
+                }
+                LuauFrameIr::Buffer(buf) => {
+                    if let LuauFieldType::Buffer(len) = field_type {
+                        let copy_len = buf.len().min(len);
+                        std::ptr::copy_nonoverlapping(buf.as_ptr(), field_ptr, copy_len);
+                    }
                 }
             }
         }
@@ -234,9 +266,11 @@ pub unsafe fn insert_luau_data(
     let non_null = NonNull::new(scratch_ptr).unwrap();
     let owning_ptr = OwningPtr::new(non_null);
 
-    world.entity_mut(entity).insert_by_id(component_id, owning_ptr);
+    world
+        .entity_mut(entity)
+        .insert_by_id(component_id, owning_ptr);
 
-    // FIX THE LEAK: Free transient allocation now that Bevy copied it to table column
+    // FIXED THIS LEAK PIZZA: Free transient allocation now that Bevy copied it to table column
     std::alloc::dealloc(scratch_ptr, schema.layout);
 }
 
@@ -245,7 +279,12 @@ pub struct LuauFrameIrLayout {
 }
 
 impl LuauFrameIrLayout {
-    pub fn write_to_table(&self, _lua: &Lua, table: &LuaTable, pool: &EngineStringPool) -> LuaResult<()> {
+    pub fn write_to_table(
+        &self,
+        _lua: &Lua,
+        table: &LuaTable,
+        pool: &EngineStringPool,
+    ) -> LuaResult<()> {
         for (key_spur, val) in &self.fields {
             let lua_key = pool.get_lua_str(_lua, *key_spur);
             match val {
@@ -253,14 +292,21 @@ impl LuauFrameIrLayout {
                 LuauFrameIr::Integer(i) => table.raw_set(lua_key, *i)?,
                 LuauFrameIr::Number(n) => table.raw_set(lua_key, *n)?,
                 LuauFrameIr::String(s) => table.raw_set(lua_key, pool.get_lua_str(_lua, *s))?,
-                LuauFrameIr::Vector3([x, y, z]) => table.raw_set(lua_key, Vector::new(*x, *y, *z))?,
+                LuauFrameIr::Vector3([x, y, z]) => {
+                    table.raw_set(lua_key, Vector::new(*x, *y, *z))?
+                }
                 _ => {}
             }
         }
         Ok(())
     }
 
-    pub fn read_from_table(lua: &Lua, table: &LuaTable, schema: &[Spur], pool: &mut EngineStringPool) -> LuaResult<Self> {
+    pub fn read_from_table(
+        lua: &Lua,
+        table: &LuaTable,
+        schema: &[Spur],
+        pool: &mut EngineStringPool,
+    ) -> LuaResult<Self> {
         let mut fields = SmallVec::new();
         for &key_spur in schema {
             let key = pool.get_lua_str(lua, key_spur);
@@ -275,7 +321,10 @@ impl LuauFrameIrLayout {
                     }
                 }
                 Value::Vector(vector) => {
-                    fields.push((key_spur, LuauFrameIr::Vector3([vector.x(), vector.y(), vector.z()])));
+                    fields.push((
+                        key_spur,
+                        LuauFrameIr::Vector3([vector.x(), vector.y(), vector.z()]),
+                    ));
                 }
                 Value::Buffer(b) => {
                     fields.push((key_spur, LuauFrameIr::Buffer(b.to_vec())));

@@ -1,6 +1,5 @@
-
-use bevy::prelude::*;
 use bevy::asset::LoadState;
+use bevy::prelude::*;
 
 use super::ecs::EngineState;
 
@@ -9,7 +8,10 @@ pub struct AssetsPlugin;
 impl Plugin for AssetsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(EngineState::Loading), begin_loading)
-            .add_systems(Update, check_loading_progress.run_if(in_state(EngineState::Loading)));
+            .add_systems(
+                Update,
+                check_loading_progress.run_if(in_state(EngineState::Loading)),
+            );
     }
 }
 

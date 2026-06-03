@@ -8,7 +8,7 @@ fn main() {
             primary_window: Some(Window {
                 title: String::from("Glider Engine"),
                 resolution: (1280.0_f32, 720.0_f32).into(),
-                present_mode: bevy::window::PresentMode::AutoNoVsync,
+                present_mode: bevy::window::PresentMode::Fifo,
                 ..default()
             }),
             ..default()
