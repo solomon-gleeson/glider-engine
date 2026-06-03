@@ -1,4 +1,8 @@
 #![allow(dead_code)]
+#![expect(
+    unsafe_code,
+    reason = "Unsafe code is needed to work with dynamic components"
+)]
 
 use bevy::{
     ecs::component::{ComponentCloneBehavior, ComponentDescriptor, ComponentId, StorageType},
@@ -81,6 +85,10 @@ pub struct SchemaRegistry {
     pub id_to_schema: HashMap<ComponentId, DynamicComponentSchema>,
 }
 
+fn align_up(offset: usize, align: usize) -> usize {
+    (offset + align - 1) & !(align - 1)
+}
+
 impl SchemaRegistry {
     pub fn register(
         &mut self,
@@ -88,17 +96,27 @@ impl SchemaRegistry {
         name: String,
         fields: &[(Spur, LuauFieldType)],
     ) -> ComponentId {
-        let mut struct_layout = Layout::from_size_align(0, 1).unwrap();
+        let mut offset = 0usize;
         let mut field_offsets = HashMap::new();
-        let mut sorted = fields.to_vec();
-        sorted.sort_by_key(|(spur, _)| *spur);
 
-        for (spur, field_type) in &sorted {
-            let (new_layout, offset) = struct_layout.extend(field_type.layout()).unwrap();
-            struct_layout = new_layout;
+        for (spur, field_type) in fields {
+            let layout = field_type.layout();
+
+            offset = align_up(offset, layout.align());
             field_offsets.insert(*spur, (offset, *field_type));
+            offset += layout.size();
         }
-        let layout = struct_layout.pad_to_align();
+
+        let struct_align = fields
+            .iter()
+            .map(|(_, t)| t.layout().align())
+            .max()
+            .unwrap_or(1);
+
+        let total_size = align_up(offset, struct_align);
+
+        let layout =
+            Layout::from_size_align(total_size, struct_align).expect("invalid dynamic layout");
 
         let schema = DynamicComponentSchema {
             name: name.clone(),
@@ -119,8 +137,10 @@ impl SchemaRegistry {
         };
 
         let id = world.register_component_with_descriptor(descriptor);
+
         self.name_to_id.insert(name, id);
         self.id_to_schema.insert(id, schema);
+
         id
     }
 }
@@ -142,9 +162,10 @@ impl DynamicComponentBridge {
             .get(&component_id)
             .expect("Schema not registered");
 
-        let u64_count = schema.layout.size().div_ceil(8);
-        let mut scratch = vec![0u64; u64_count];
-        let scratch_ptr = scratch.as_mut_ptr() as *mut u8;
+        let bytes = schema.layout.size();
+        let len = bytes.div_ceil(size_of::<u64>());
+        let mut scratch = vec![0u64; len];
+        let scratch_ptr = scratch.as_mut_ptr().cast::<u8>();
 
         for (&spur, &(offset, field_type)) in &schema.fields {
             let lua_key = pool.get_lua_str(lua, spur);
@@ -152,25 +173,25 @@ impl DynamicComponentBridge {
 
             match (table.raw_get::<LuaValue>(lua_key)?, field_type) {
                 (LuaValue::Boolean(b), LuauFieldType::Bool) => {
-                    std::ptr::write(field_ptr as *mut bool, b)
+                    std::ptr::write(field_ptr.cast::<bool>(), b)
                 }
                 (LuaValue::Integer(i), LuauFieldType::Integer) => {
-                    std::ptr::write(field_ptr as *mut i64, i)
+                    std::ptr::write(field_ptr.cast::<i64>(), i)
                 }
                 (LuaValue::Number(n), LuauFieldType::Number) => {
-                    std::ptr::write(field_ptr as *mut f64, n)
+                    std::ptr::write(field_ptr.cast::<f64>(), n)
                 }
                 (LuaValue::Vector(v), LuauFieldType::Vector3) => {
-                    std::ptr::write(field_ptr as *mut [f32; 3], [v.x(), v.y(), v.z()])
+                    std::ptr::write(field_ptr.cast::<[f32; 3]>(), [v.x(), v.y(), v.z()])
                 }
                 (LuaValue::String(s), LuauFieldType::String) => {
                     if let Some(str_spur) = pool.register_lua_string(lua, &s) {
-                        std::ptr::write(field_ptr as *mut Spur, str_spur);
+                        std::ptr::write(field_ptr.cast::<Spur>(), str_spur);
                     }
                 }
                 (LuaValue::Buffer(b), LuauFieldType::Buffer(len)) => {
                     std::ptr::copy_nonoverlapping(
-                        b.to_pointer() as *mut u8,
+                        b.to_pointer().cast::<u8>(),
                         field_ptr,
                         b.len().min(len),
                     );
@@ -179,7 +200,9 @@ impl DynamicComponentBridge {
             }
         }
 
-        let owning_ptr = OwningPtr::new(NonNull::new(scratch_ptr).unwrap());
+        let non_null = NonNull::new_unchecked(scratch_ptr);
+        let owning_ptr = OwningPtr::new(non_null);
+
         world
             .entity_mut(entity)
             .insert_by_id(component_id, owning_ptr);
@@ -211,20 +234,20 @@ impl DynamicComponentBridge {
 
             match field_type {
                 LuauFieldType::Bool => {
-                    table.raw_set(lua_key, std::ptr::read(field_ptr as *const bool))?
+                    table.raw_set(lua_key, std::ptr::read(field_ptr.cast::<bool>()))?
                 }
                 LuauFieldType::Integer => {
-                    table.raw_set(lua_key, std::ptr::read(field_ptr as *const i64))?
+                    table.raw_set(lua_key, std::ptr::read(field_ptr.cast::<i64>()))?
                 }
                 LuauFieldType::Number => {
-                    table.raw_set(lua_key, std::ptr::read(field_ptr as *const f64))?
+                    table.raw_set(lua_key, std::ptr::read(field_ptr.cast::<f64>()))?
                 }
                 LuauFieldType::Vector3 => {
-                    let v = std::ptr::read(field_ptr as *const [f32; 3]);
+                    let v = std::ptr::read(field_ptr.cast::<[f32; 3]>());
                     table.raw_set(lua_key, mluau::Vector::new(v[0], v[1], v[2]))?;
                 }
                 LuauFieldType::String => {
-                    let str_spur = std::ptr::read(field_ptr as *const Spur);
+                    let str_spur = std::ptr::read(field_ptr.cast::<Spur>());
                     table.raw_set(lua_key, pool.get_lua_str(lua, str_spur))?;
                 }
                 LuauFieldType::Buffer(len) => {

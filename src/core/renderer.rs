@@ -7,10 +7,7 @@ impl Plugin for RendererPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.12)))
             .add_systems(Startup, spawn_camera)
-            .add_systems(
-                Update,
-                camera_follow.after(bevy::transform::TransformSystems::Propagate),
-            );
+            .add_systems(FixedUpdate, camera_follow);
     }
 }
 
