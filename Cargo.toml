@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.19.0-rc.2"
+bevy = { version = "0.19.0-rc.2", default-features = false, features = ["2d"] }
 avian2d = { git = "https://github.com/avianphysics/avian", rev = "a3b0799" }
 mluau = { git = "https://github.com/mluau/mluau" }
 lasso = "0.7"
