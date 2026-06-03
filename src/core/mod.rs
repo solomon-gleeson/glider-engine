@@ -2,6 +2,8 @@ use bevy::prelude::*;
 
 pub mod assets;
 pub mod ecs;
+pub mod input;
+pub mod physics;
 pub mod renderer;
 
 pub struct CorePlugin;
@@ -11,6 +13,8 @@ impl Plugin for CorePlugin {
         app.add_plugins((
             assets::AssetsPlugin,
             ecs::EcsPlugin,
+            input::InputPlugin,
+            physics::PhysicsPlugin,
             renderer::RendererPlugin,
         ));
     }
