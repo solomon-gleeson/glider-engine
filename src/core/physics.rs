@@ -1,6 +1,7 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
+use super::assets::EngineAssets;
 use super::ecs::EngineState;
 
 pub struct PhysicsPlugin;
@@ -16,7 +17,7 @@ impl Plugin for PhysicsPlugin {
 #[derive(Component)]
 pub struct Player;
 
-fn setup_physics_test(mut commands: Commands) {
+fn setup_physics_test(mut commands: Commands, assets: Res<EngineAssets>) {
     commands.spawn((
         SpriteBundle {
             sprite: Sprite {
@@ -33,8 +34,8 @@ fn setup_physics_test(mut commands: Commands) {
 
     commands.spawn((
         SpriteBundle {
+            texture: assets.placeholder_texture.clone(),
             sprite: Sprite {
-                color: Color::srgb(0.8, 0.2, 0.2),
                 custom_size: Some(Vec2::new(50.0, 50.0)),
                 ..default()
             },
