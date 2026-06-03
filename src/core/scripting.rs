@@ -106,7 +106,6 @@ pub enum LuauFrameIr {
     Integer(i64),
     Number(f64),
     Vector3([f32; 3]),
-    Vector4([f32; 4]),
     String(Spur),
     Buffer(Vec<u8>),
 }
@@ -117,7 +116,6 @@ pub enum LuauFieldType {
     Integer,
     Number,
     Vector3,
-    Vector4,
     String,
     Buffer(usize),
 }
@@ -129,7 +127,6 @@ impl LuauFieldType {
             Self::Integer => Layout::new::<i64>(),
             Self::Number => Layout::new::<f64>(),
             Self::Vector3 => Layout::new::<[f32; 3]>(),
-            Self::Vector4 => Layout::new::<[f32; 4]>(),
             Self::String => Layout::new::<Spur>(),
             Self::Buffer(n) => Layout::array::<u8>(n).unwrap(),
         }
@@ -247,11 +244,6 @@ pub unsafe fn insert_luau_data(
                 LuauFrameIr::Vector3(v) => {
                     if matches!(field_type, LuauFieldType::Vector3) {
                         std::ptr::write(field_ptr as *mut [f32; 3], *v);
-                    }
-                }
-                LuauFrameIr::Vector4(v) => {
-                    if matches!(field_type, LuauFieldType::Vector4) {
-                        std::ptr::write(field_ptr as *mut [f32; 4], *v);
                     }
                 }
                 LuauFrameIr::String(s) => {
