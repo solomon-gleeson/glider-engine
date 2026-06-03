@@ -1,13 +1,15 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
+use super::ecs::EngineState;
+
 pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(PhysicsPlugins::default())
             .insert_resource(Gravity(Vec2::new(0.0, -980.0)))
-            .add_systems(Startup, setup_physics_test);
+            .add_systems(OnEnter(EngineState::Running), setup_physics_test);
     }
 }
 
