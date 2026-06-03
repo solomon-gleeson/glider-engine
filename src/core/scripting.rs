@@ -4,8 +4,8 @@ use bevy::ecs::component::{ComponentDescriptor, ComponentId, StorageType};
 use bevy::prelude::*;
 use bevy::ptr::OwningPtr;
 use lasso::{Rodeo, Spur};
-use mlua::prelude::*;
-use mlua::{RegistryKey, Value, Vector};
+use mluau::prelude::*;
+use mluau::{RegistryKey, Value, Vector};
 use smallvec::SmallVec;
 use std::hash::{Hash, Hasher, DefaultHasher};
 use std::ptr::NonNull;
@@ -74,7 +74,7 @@ impl EngineStringPool {
     }
 
     #[inline]
-    pub fn get_lua_str<'lua>(&self, lua: &'lua Lua, spur: Spur) -> LuaString<'lua> {
+    pub fn get_lua_str(&self, lua: &Lua, spur: Spur) -> LuaString {
         let key = self.bridge.get(&spur).expect("unregistered spur");
         lua.registry_value(key).expect("failed to retrieve registry string")
     }
@@ -228,14 +228,14 @@ pub struct LuauFrameIrLayout {
 }
 
 impl LuauFrameIrLayout {
-    pub fn write_to_table(&self, lua: &Lua, table: &LuaTable, pool: &EngineStringPool) -> LuaResult<()> {
+    pub fn write_to_table(&self, _lua: &Lua, table: &LuaTable, pool: &EngineStringPool) -> LuaResult<()> {
         for (key_spur, val) in &self.fields {
-            let lua_key = pool.get_lua_str(lua, *key_spur);
+            let lua_key = pool.get_lua_str(_lua, *key_spur);
             match val {
                 LuauFrameIr::Bool(b) => table.raw_set(lua_key, *b)?,
                 LuauFrameIr::Integer(i) => table.raw_set(lua_key, *i)?,
                 LuauFrameIr::Number(n) => table.raw_set(lua_key, *n)?,
-                LuauFrameIr::String(s) => table.raw_set(lua_key, pool.get_lua_str(lua, *s))?,
+                LuauFrameIr::String(s) => table.raw_set(lua_key, pool.get_lua_str(_lua, *s))?,
                 LuauFrameIr::Vector3([x, y, z]) => table.raw_set(lua_key, Vector::new(*x, *y, *z))?,
                 _ => {}
             }
@@ -247,9 +247,9 @@ impl LuauFrameIrLayout {
         let mut fields = SmallVec::new();
         for &key_spur in schema {
             let key = pool.get_lua_str(lua, key_spur);
-            match table.raw_get::<LuaString, Value>(key)? {
+            match table.raw_get::<Value>(key)? {
                 Value::Boolean(b) => fields.push((key_spur, LuauFrameIr::Bool(b))),
-                Value::Integer(i) => fields.push((key_spur, LuauFrameIr::Integer(i as i64))),
+                Value::Integer(i) => fields.push((key_spur, LuauFrameIr::Integer(i))),
                 Value::Number(n) => fields.push((key_spur, LuauFrameIr::Number(n))),
                 Value::String(s) => {
                     // FIX: Dynamically register unexpected strings created on runtime heap
@@ -260,7 +260,9 @@ impl LuauFrameIrLayout {
                 Value::Vector(vector) => {
                     fields.push((key_spur, LuauFrameIr::Vector3([vector.x(), vector.y(), vector.z()])));
                 }
-                // mlua 0.9 might not have a Buffer variant yet depending on features
+                Value::Buffer(b) => {
+                    fields.push((key_spur, LuauFrameIr::Buffer(b.to_vec())));
+                }
                 _ => {}
             }
         }
