@@ -1,4 +1,6 @@
 #[cfg(feature = "render")]
+pub mod animation;
+#[cfg(feature = "render")]
 pub mod assets;
 pub mod ecs;
 
@@ -29,6 +31,8 @@ impl Plugin for CorePlugin {
             scripting::ScriptingPlugin,
             #[cfg(feature = "render")]
             renderer::RendererPlugin,
+            #[cfg(feature = "render")]
+            animation::AnimationPlugin,
         ));
     }
 }
