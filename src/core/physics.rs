@@ -1,6 +1,8 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 
+use super::animation::PlayerAnimation;
 use super::assets::EngineAssets;
 use super::ecs::EngineState;
 
@@ -17,6 +19,9 @@ impl Plugin for PhysicsPlugin {
 #[derive(Component)]
 pub struct Player;
 
+const PLAYER_SIZE: f32 = 50.0;
+const PLAYER_SPRITE_SCALE: f32 = 192.0;
+
 fn setup_physics_test(mut commands: Commands, assets: Res<EngineAssets>) {
     commands.spawn((
         Sprite {
@@ -31,14 +36,20 @@ fn setup_physics_test(mut commands: Commands, assets: Res<EngineAssets>) {
 
     commands.spawn((
         Sprite {
-            custom_size: Some(Vec2::new(50.0, 50.0)),
-            image: assets.placeholder_texture.clone(),
+            image: assets.idle.image.clone(),
+            texture_atlas: Some(TextureAtlas {
+                layout: assets.idle.layout.clone(),
+                index: 0,
+            }),
+            custom_size: Some(Vec2::splat(PLAYER_SPRITE_SCALE)),
             ..default()
         },
+        Anchor(Vec2::new(0.0, (PLAYER_SIZE * 0.5) / PLAYER_SPRITE_SCALE - 0.5)),
         Transform::from_xyz(0.0, 200.0, 0.0),
         RigidBody::Dynamic,
-        Collider::rectangle(50.0, 50.0),
+        Collider::rectangle(PLAYER_SIZE, PLAYER_SIZE),
         LockedAxes::ROTATION_LOCKED,
         Player,
+        PlayerAnimation::default(),
     ));
 }
