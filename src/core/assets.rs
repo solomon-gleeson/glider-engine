@@ -15,17 +15,37 @@ impl Plugin for AssetsPlugin {
     }
 }
 
-#[derive(Resource)]
-pub struct EngineAssets {
-    pub placeholder_texture: Handle<Image>,
+#[derive(Clone)]
+pub struct SpriteSheet {
+    pub image: Handle<Image>,
+    pub layout: Handle<TextureAtlasLayout>,
+    pub frames: usize,
 }
 
-fn begin_loading(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let engine_assets = EngineAssets {
-        placeholder_texture: asset_server.load("textures/player.png"),
+#[derive(Resource)]
+pub struct EngineAssets {
+    pub idle: SpriteSheet,
+    pub walk: SpriteSheet,
+    pub jump: SpriteSheet,
+}
+
+fn begin_loading(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut layouts: ResMut<Assets<TextureAtlasLayout>>,
+) {
+    let frame = UVec2::splat(128);
+    let mut load = |path: &'static str, frames: u32| SpriteSheet {
+        image: asset_server.load(path),
+        layout: layouts.add(TextureAtlasLayout::from_grid(frame, frames, 1, None, None)),
+        frames: frames as usize,
     };
 
-    commands.insert_resource(engine_assets);
+    commands.insert_resource(EngineAssets {
+        idle: load("textures/Idle.png", 6),
+        walk: load("textures/Walk.png", 8),
+        jump: load("textures/Jump.png", 10),
+    });
 }
 
 fn check_loading_progress(
@@ -33,18 +53,27 @@ fn check_loading_progress(
     engine_assets: Res<EngineAssets>,
     mut next_state: ResMut<NextState<EngineState>>,
 ) {
-    if let Some(load_state) = asset_server.get_load_state(&engine_assets.placeholder_texture) {
-        match load_state {
-            LoadState::Loaded => {
-                info!("Assets successfully loaded into memory.");
-                next_state.set(EngineState::Running);
-            }
-            LoadState::Failed(error) => {
+    let images = [
+        &engine_assets.idle.image,
+        &engine_assets.walk.image,
+        &engine_assets.jump.image,
+    ];
+
+    let mut all_loaded = true;
+    for image in images {
+        match asset_server.get_load_state(image) {
+            Some(LoadState::Loaded) => {}
+            Some(LoadState::Failed(error)) => {
                 error!("Failed to load the requested asset: {:?}", error);
-                // Fallback to Running even if assets fail, to prevent system lockup from log spam
                 next_state.set(EngineState::Running);
+                return;
             }
-            _ => {}
+            _ => all_loaded = false,
         }
+    }
+
+    if all_loaded {
+        info!("Assets successfully loaded into memory.");
+        next_state.set(EngineState::Running);
     }
 }
