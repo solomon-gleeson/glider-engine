@@ -58,7 +58,7 @@ pub enum LuauFieldType {
     Bool,
     Integer,
     Number,
-    Vector3,
+    Vector4,
     String,
     Buffer(usize),
 }
@@ -69,7 +69,7 @@ impl LuauFieldType {
             Self::Bool => Layout::new::<bool>(),
             Self::Integer => Layout::new::<i64>(),
             Self::Number => Layout::new::<f64>(),
-            Self::Vector3 => Layout::new::<[f32; 3]>(),
+            Self::Vector4 => Layout::new::<[f32; 4]>(),
             Self::String => Layout::new::<Spur>(),
             Self::Buffer(n) => Layout::array::<u8>(n).unwrap(),
         }
@@ -185,8 +185,8 @@ impl DynamicComponentBridge {
                 (LuaValue::Number(n), LuauFieldType::Number) => {
                     std::ptr::write(field_ptr.cast::<f64>(), n)
                 }
-                (LuaValue::Vector(v), LuauFieldType::Vector3) => {
-                    std::ptr::write(field_ptr.cast::<[f32; 3]>(), [v.x(), v.y(), v.z()])
+                (LuaValue::Vector(v), LuauFieldType::Vector4) => {
+                    std::ptr::write(field_ptr.cast::<[f32; 4]>(), [v.x(), v.y(), v.z(), v.w()])
                 }
                 (LuaValue::String(s), LuauFieldType::String) => {
                     if let Some(str_spur) = pool.register_lua_string(lua, &s) {
@@ -246,9 +246,9 @@ impl DynamicComponentBridge {
                 LuauFieldType::Number => {
                     table.raw_set(lua_key, std::ptr::read(field_ptr.cast::<f64>()))?
                 }
-                LuauFieldType::Vector3 => {
-                    let v = std::ptr::read(field_ptr.cast::<[f32; 3]>());
-                    table.raw_set(lua_key, mluau::Vector::new(v[0], v[1], v[2]))?;
+                LuauFieldType::Vector4 => {
+                    let v = std::ptr::read(field_ptr.cast::<[f32; 4]>());
+                    table.raw_set(lua_key, mluau::Vector::new(v[0], v[1], v[2], v[3]))?;
                 }
                 LuauFieldType::String => {
                     let str_spur = std::ptr::read(field_ptr.cast::<Spur>());
