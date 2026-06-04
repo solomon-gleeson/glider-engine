@@ -238,21 +238,27 @@ impl DynamicComponentBridge {
 
             match field_type {
                 LuauFieldType::Bool => {
-                    table.raw_set(lua_key, std::ptr::read(field_ptr.cast::<bool>()))?
+                    let val = &*field_ptr.cast::<bool>();
+                    table.raw_set(lua_key, *val)?;
                 }
                 LuauFieldType::Integer => {
-                    table.raw_set(lua_key, std::ptr::read(field_ptr.cast::<i64>()))?
+                    let val = &*field_ptr.cast::<i64>();
+                    table.raw_set(lua_key, *val)?;
                 }
                 LuauFieldType::Number => {
-                    table.raw_set(lua_key, std::ptr::read(field_ptr.cast::<f64>()))?
+                    let val = &*field_ptr.cast::<f64>();
+                    table.raw_set(lua_key, *val)?;
                 }
                 LuauFieldType::Vector4 => {
-                    let v = std::ptr::read(field_ptr.cast::<[f32; 4]>());
-                    table.raw_set(lua_key, LuaVector::new(v[0], v[1], v[2], v[3]))?;
+                    let array_ref = unsafe { &*field_ptr.cast::<[f32; 4]>() };
+                    table.raw_set(
+                        lua_key,
+                        mluau::Vector::new(array_ref[0], array_ref[1], array_ref[2], array_ref[3]),
+                    )?;
                 }
                 LuauFieldType::String => {
-                    let str_spur = std::ptr::read(field_ptr.cast::<Spur>());
-                    table.raw_set(lua_key, pool.get_lua_str(lua, str_spur))?;
+                    let str_spur = &*field_ptr.cast::<Spur>();
+                    table.raw_set(lua_key, pool.get_lua_str(lua, *str_spur))?;
                 }
                 LuauFieldType::Buffer(len) => {
                     let slice = std::slice::from_raw_parts(field_ptr, len);
