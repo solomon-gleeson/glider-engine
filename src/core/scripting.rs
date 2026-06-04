@@ -248,7 +248,7 @@ impl DynamicComponentBridge {
                 }
                 LuauFieldType::Vector4 => {
                     let v = std::ptr::read(field_ptr.cast::<[f32; 4]>());
-                    table.raw_set(lua_key, mluau::Vector::new(v[0], v[1], v[2], v[3]))?;
+                    table.raw_set(lua_key, LuaVector::new(v[0], v[1], v[2], v[3]))?;
                 }
                 LuauFieldType::String => {
                     let str_spur = std::ptr::read(field_ptr.cast::<Spur>());
