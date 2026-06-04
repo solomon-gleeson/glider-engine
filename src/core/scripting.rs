@@ -11,7 +11,11 @@ use bevy::{
 };
 use lasso::{Rodeo, Spur};
 use mluau::prelude::*;
-use std::{alloc::Layout, collections::HashMap, ptr::NonNull};
+use std::{
+    alloc::{alloc_zeroed, dealloc, Layout},
+    collections::HashMap,
+    ptr::NonNull,
+};
 
 pub struct ScriptingPlugin;
 
@@ -166,10 +170,11 @@ impl DynamicComponentBridge {
             .get(&component_id)
             .expect("Schema not registered");
 
-        let bytes = schema.layout.size();
-        let len = bytes.div_ceil(size_of::<u64>());
-        let mut scratch = vec![0u64; len];
-        let scratch_ptr = scratch.as_mut_ptr().cast::<u8>();
+        let layout = schema.layout;
+        let scratch_ptr = unsafe { alloc_zeroed(layout) };
+        if scratch_ptr.is_null() {
+            std::alloc::handle_alloc_error(layout);
+        }
 
         for (&spur, &(offset, field_type)) in &schema.fields {
             let lua_key = pool.get_lua_str(lua, spur);
@@ -210,6 +215,10 @@ impl DynamicComponentBridge {
         world
             .entity_mut(entity)
             .insert_by_id(component_id, owning_ptr);
+
+        unsafe {
+            dealloc(scratch_ptr, layout);
+        }
 
         Ok(())
     }
