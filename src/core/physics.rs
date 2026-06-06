@@ -22,6 +22,7 @@ pub struct Player;
 const PLAYER_SIZE: f32 = 50.0;
 const PLAYER_SPRITE_SCALE: f32 = 192.0;
 
+#[allow(clippy::needless_pass_by_value)]
 fn setup_physics_test(mut commands: Commands, assets: Res<EngineAssets>) {
     commands.spawn((
         Sprite {

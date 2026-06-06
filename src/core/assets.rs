@@ -29,6 +29,7 @@ pub struct EngineAssets {
     pub jump: SpriteSheet,
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn begin_loading(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -48,6 +49,7 @@ fn begin_loading(
     });
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn check_loading_progress(
     asset_server: Res<AssetServer>,
     engine_assets: Res<EngineAssets>,

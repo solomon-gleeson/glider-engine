@@ -18,6 +18,7 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn((Camera2d, MainCamera));
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn camera_follow(
     time: Res<Time>,
     player: Single<&Transform, (With<Player>, Without<MainCamera>)>,
@@ -29,6 +30,6 @@ fn camera_follow(
     let tracking_speed = 4.5;
     let delta = 1.0 - (-tracking_speed * time.delta_secs()).exp();
 
-    camera.translation.x = camera_pos.x + (player_pos.x - camera_pos.x) * delta;
-    camera.translation.y = camera_pos.y + (player_pos.y - camera_pos.y) * delta;
+    camera.translation.x = (player_pos.x - camera_pos.x).mul_add(delta, camera_pos.x);
+    camera.translation.y = (player_pos.y - camera_pos.y).mul_add(delta, camera_pos.y);
 }

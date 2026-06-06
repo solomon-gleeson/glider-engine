@@ -38,7 +38,7 @@ impl Default for PlayerAnimation {
     }
 }
 
-fn sheet_for(assets: &EngineAssets, state: AnimationState) -> &SpriteSheet {
+const fn sheet_for(assets: &EngineAssets, state: AnimationState) -> &SpriteSheet {
     match state {
         AnimationState::Idle => &assets.idle,
         AnimationState::Walk => &assets.walk,
@@ -46,6 +46,7 @@ fn sheet_for(assets: &EngineAssets, state: AnimationState) -> &SpriteSheet {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn animate_player(
     time: Res<Time>,
     assets: Res<EngineAssets>,

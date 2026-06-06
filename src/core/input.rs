@@ -15,10 +15,10 @@ impl Plugin for InputPlugin {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn player_movement(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut query: Query<(Entity, &mut LinearVelocity, &Transform), With<Player>>,
-    // Avian's SpatialQuery system allows us to cast rays and check overlaps
     spatial_query: SpatialQuery,
 ) {
     let speed = 300.0;
