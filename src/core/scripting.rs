@@ -178,45 +178,47 @@ impl DynamicComponentBridge {
 
         for (&spur, &(offset, field_type)) in &schema.fields {
             let lua_key = pool.get_lua_str(lua, spur);
-            let field_ptr = scratch_ptr.add(offset);
+            let field_ptr = unsafe { scratch_ptr.add(offset) };
 
             match (table.raw_get::<LuaValue>(lua_key)?, field_type) {
                 (LuaValue::Boolean(b), LuauFieldType::Bool) => {
-                    std::ptr::write(field_ptr.cast::<bool>(), b)
+                    unsafe { std::ptr::write(field_ptr.cast::<bool>(), b) }
                 }
                 (LuaValue::Integer(i), LuauFieldType::Integer) => {
-                    std::ptr::write(field_ptr.cast::<i64>(), i)
+                    unsafe { std::ptr::write(field_ptr.cast::<i64>(), i) }
                 }
                 (LuaValue::Number(n), LuauFieldType::Number) => {
-                    std::ptr::write(field_ptr.cast::<f64>(), n)
+                    unsafe { std::ptr::write(field_ptr.cast::<f64>(), n) }
                 }
                 (LuaValue::Vector(v), LuauFieldType::Vector4) => {
-                    std::ptr::write(field_ptr.cast::<[f32; 4]>(), [v.x(), v.y(), v.z(), v.w()])
+                    unsafe { std::ptr::write(field_ptr.cast::<[f32; 4]>(), [v.x(), v.y(), v.z(), v.w()]) }
                 }
                 (LuaValue::String(s), LuauFieldType::String) => {
                     if let Some(str_spur) = pool.register_lua_string(lua, &s) {
-                        std::ptr::write(field_ptr.cast::<Spur>(), str_spur);
+                        unsafe { std::ptr::write(field_ptr.cast::<Spur>(), str_spur) };
                     }
                 }
                 (LuaValue::Buffer(b), LuauFieldType::Buffer(len)) => {
-                    std::ptr::copy_nonoverlapping(
-                        b.to_pointer().cast::<u8>(),
-                        field_ptr,
-                        b.len().min(len),
-                    );
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            b.to_pointer().cast::<u8>(),
+                            field_ptr,
+                            b.len().min(len),
+                        );
+                    }
                 }
                 _ => {}
             }
         }
 
-        let non_null = NonNull::new_unchecked(scratch_ptr);
-        let owning_ptr = OwningPtr::new(non_null);
-
-        world
-            .entity_mut(entity)
-            .insert_by_id(component_id, owning_ptr);
+        let non_null = unsafe { NonNull::new_unchecked(scratch_ptr) };
+        let owning_ptr = unsafe { OwningPtr::new(non_null) };
 
         unsafe {
+            world
+                .entity_mut(entity)
+                .insert_by_id(component_id, owning_ptr);
+
             dealloc(scratch_ptr, layout);
         }
 
@@ -243,19 +245,19 @@ impl DynamicComponentBridge {
 
         for (&spur, &(offset, field_type)) in &schema.fields {
             let lua_key = pool.get_lua_str(lua, spur);
-            let field_ptr = raw_ptr.add(offset);
+            let field_ptr = unsafe { raw_ptr.add(offset) };
 
             match field_type {
                 LuauFieldType::Bool => {
-                    let val = &*field_ptr.cast::<bool>();
+                    let val = unsafe { &*field_ptr.cast::<bool>() };
                     table.raw_set(lua_key, *val)?;
                 }
                 LuauFieldType::Integer => {
-                    let val = &*field_ptr.cast::<i64>();
+                    let val = unsafe { &*field_ptr.cast::<i64>() };
                     table.raw_set(lua_key, *val)?;
                 }
                 LuauFieldType::Number => {
-                    let val = &*field_ptr.cast::<f64>();
+                    let val = unsafe { &*field_ptr.cast::<f64>() };
                     table.raw_set(lua_key, *val)?;
                 }
                 LuauFieldType::Vector4 => {
@@ -266,11 +268,11 @@ impl DynamicComponentBridge {
                     )?;
                 }
                 LuauFieldType::String => {
-                    let str_spur = &*field_ptr.cast::<Spur>();
+                    let str_spur = unsafe { &*field_ptr.cast::<Spur>() };
                     table.raw_set(lua_key, pool.get_lua_str(lua, *str_spur))?;
                 }
                 LuauFieldType::Buffer(len) => {
-                    let slice = std::slice::from_raw_parts(field_ptr, len);
+                    let slice = unsafe { std::slice::from_raw_parts(field_ptr, len) };
                     table.raw_set(lua_key, lua.create_buffer(slice)?)?;
                 }
             }
