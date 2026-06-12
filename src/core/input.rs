@@ -43,6 +43,7 @@ fn player_movement(
             velocity.x = 0.0;
         }
 
+        
         if is_grounded
             && (keyboard_input.just_pressed(KeyCode::Space)
                 || keyboard_input.just_pressed(KeyCode::KeyW))

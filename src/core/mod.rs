@@ -12,7 +12,6 @@ pub mod physics;
 
 #[cfg(feature = "render")]
 pub mod renderer;
-pub mod scripting;
 
 use bevy::prelude::*;
 
@@ -28,11 +27,32 @@ impl Plugin for CorePlugin {
             physics::PhysicsPlugin,
             #[cfg(feature = "render")]
             input::InputPlugin,
-            scripting::ScriptingPlugin,
+            bevy_luau::ScriptingPlugin,
             #[cfg(feature = "render")]
             renderer::RendererPlugin,
             #[cfg(feature = "render")]
             animation::AnimationPlugin,
         ));
     }
+}
+
+pub fn run() {
+    App::new()
+        .add_plugins((
+            crate::instance::InstancePlugin,
+            #[cfg(feature = "render")]
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: String::from("Glider Engine"),
+                    resolution: (1280, 720).into(),
+                    present_mode: bevy::window::PresentMode::Fifo,
+                    ..default()
+                }),
+                ..default()
+            }),
+            CorePlugin,
+            #[cfg(feature = "editor")]
+            crate::editor::EditorPlugin,
+        ))
+        .run();
 }

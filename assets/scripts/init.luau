@@ -1,1 +1,1 @@
-info("I hate Rust said the guy coding luau from the Glider Engine Luau environment!")
+print("here's a great big test")

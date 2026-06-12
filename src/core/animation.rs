@@ -9,7 +9,10 @@ pub struct AnimationPlugin;
 
 impl Plugin for AnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, animate_player.run_if(in_state(EngineState::Running)));
+        app.add_systems(
+            Update,
+            animate_player.run_if(in_state(EngineState::Running)),
+        );
     }
 }
 

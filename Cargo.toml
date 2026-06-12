@@ -1,22 +1,45 @@
+
+
+
 [package]
 name = "glider"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.19.0-rc.2", features = [
+bevy = { version = "0.19.0-rc.3", features = [
     "async_executor",
     "bevy_log",
     "bevy_state",
+    "bevy_text",
+    "bevy_ui",
+    "bevy_ui_render",
     "multi_threaded",
     "reflect_auto_register",
+    "bevy_picking",
+    "ui_picking",
+    "bevy_input_focus",
+    "bevy_ui_widgets",
 ], default-features = false }
 avian2d = { git = "https://github.com/avianphysics/avian", rev = "a3b0799", optional = true }
 bevy_luau = { package = "bevy-luau", git = "https://github.com/Glide-2D/bevy-luau" }
-lasso = "0.7.1"
-smallvec = "1.13.1"
 mluau = { git = "https://github.com/mluau/mluau", version = "0.11.5", features = ["luau-vector4"] }
+ron = "0.12"
+serde = { version = "1.0", features = ["derive"] }
 
 [features]
-default = ["render"]
-render = ["bevy/2d", "dep:avian2d"]
+default = ["editor"]
+audio = ["bevy/bevy_audio", "bevy/vorbis", "bevy/wav", "bevy/mp3"]
+render = ["bevy/2d", "dep:avian2d", "audio"]
+editor = ["render"]
+
+[profile.dev]
+opt-level = 1
+debug = 0
+strip = "symbols"
+incremental = true
+codegen-units = 256
+lto = "off"
+
+[profile.dev.package."*"]
+opt-level = 3

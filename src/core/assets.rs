@@ -67,7 +67,7 @@ fn check_loading_progress(
             Some(LoadState::Loaded) => {}
             Some(LoadState::Failed(error)) => {
                 error!("Failed to load the requested asset: {:?}", error);
-                next_state.set(EngineState::Running);
+                next_state.set(EngineState::Editing);
                 return;
             }
             _ => all_loaded = false,
@@ -76,6 +76,6 @@ fn check_loading_progress(
 
     if all_loaded {
         info!("Assets successfully loaded into memory.");
-        next_state.set(EngineState::Running);
+        next_state.set(EngineState::Editing);
     }
 }

@@ -15,7 +15,7 @@ impl Plugin for RendererPlugin {
 pub struct MainCamera;
 
 fn spawn_camera(mut commands: Commands) {
-    commands.spawn((Camera2d, MainCamera));
+    commands.spawn((Camera2d, MainCamera, IsDefaultUiCamera));
 }
 
 #[allow(clippy::needless_pass_by_value)]

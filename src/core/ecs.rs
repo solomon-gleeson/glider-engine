@@ -12,5 +12,6 @@ impl Plugin for EcsPlugin {
 pub enum EngineState {
     #[default]
     Loading,
+    Editing,
     Running,
 }
