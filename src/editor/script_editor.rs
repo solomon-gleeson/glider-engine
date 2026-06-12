@@ -3,6 +3,7 @@
 use bevy::input_focus::AutoFocus;
 use bevy::prelude::*;
 use bevy::text::{EditableText, LineBreak, TextCursorStyle, TextEditChange};
+use bevy::ui::widget::TextScroll;
 
 use super::editor_state::{EditorState, FileContent};
 use super::icons::EditorFonts;
@@ -153,6 +154,7 @@ pub fn spawn_script_editor(
                 ..default()
             },
             buffer,
+            TextScroll(Vec2::ZERO),
             TextFont {
                 font: fonts.mono.clone().into(),
                 font_size: FontSize::from(theme.sizes.heading_size),

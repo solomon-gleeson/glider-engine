@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::text::{EditableText, TextCursorStyle, TextEditChange};
+use bevy::ui::widget::TextScroll;
 
 use super::editor_state::EditorState;
 use super::theme::EditorTheme;
@@ -39,6 +40,7 @@ pub fn spawn_text_input(
                 ..default()
             },
             EditableText::new(initial),
+            TextScroll(Vec2::ZERO),
             TextFont {
                 font_size: FontSize::from(font_size),
                 ..default()

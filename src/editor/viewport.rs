@@ -500,11 +500,12 @@ pub fn viewport_tab_system(
             let close = commands
                 .spawn((
                     Node {
-                        width: Val::Px(14.0),
-                        height: Val::Px(14.0),
-                        margin: UiRect::left(Val::Px(4.0)),
+                        width: Val::Px(16.0),
+                        height: Val::Px(16.0),
+                        margin: UiRect::left(Val::Px(6.0)),
                         align_items: AlignItems::Center,
                         justify_content: JustifyContent::Center,
+                        border_radius: BorderRadius::all(Val::Px(3.0)),
                         ..default()
                     },
                     BackgroundColor(Color::NONE),
@@ -517,12 +518,12 @@ pub fn viewport_tab_system(
 
             let close_text = commands
                 .spawn((
-                    Text::new("x"),
+                    Text::new("\u{00D7}"),
                     TextFont {
-                        font_size: FontSize::from(10.0_f32),
+                        font_size: FontSize::from(13.0_f32),
                         ..default()
                     },
-                    TextColor(theme.colors.text_dim),
+                    TextColor(theme.colors.text),
                 ))
                 .id();
             commands.entity(close).add_child(close_text);

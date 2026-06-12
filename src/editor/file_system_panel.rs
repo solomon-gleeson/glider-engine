@@ -128,19 +128,6 @@ pub fn spawn_file_system_panel(
         commands.entity(breadcrumb).add_child(arrow);
     }
 
-    let path_box = commands
-        .spawn((
-            Node {
-                flex_grow: 1.0,
-                padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(3.0), Val::Px(3.0)),
-                border_radius: BorderRadius::all(Val::Px(3.0)),
-                ..default()
-            },
-            BackgroundColor(theme.colors.field_bg),
-        ))
-        .id();
-    commands.entity(breadcrumb).add_child(path_box);
-
     let filter_row = commands
         .spawn((
             Node {
