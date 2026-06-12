@@ -17,16 +17,7 @@ pub struct PlayButton;
 pub struct BuildButton;
 
 #[derive(Component)]
-pub struct StatusDot;
-
-#[derive(Component)]
-pub struct StatusText;
-
-#[derive(Component)]
 pub struct MenuBarItem;
-
-#[derive(Component)]
-pub struct ContextSwitchItem;
 
 pub fn spawn_toolbar(commands: &mut Commands, parent: Entity, theme: &EditorTheme) {
     let toolbar = commands
@@ -45,7 +36,7 @@ pub fn spawn_toolbar(commands: &mut Commands, parent: Entity, theme: &EditorThem
         .id();
     commands.entity(parent).add_child(toolbar);
 
-    for label in ["Scene", "Project", "Debug", "Editor", "Help"] {
+    for label in ["File", "Edit", "Add", "Help"] {
         let item = commands
             .spawn((
                 Node {
@@ -75,62 +66,13 @@ pub fn spawn_toolbar(commands: &mut Commands, parent: Entity, theme: &EditorThem
         commands.entity(item).add_child(text);
     }
 
-    let spacer_left = commands
+    let spacer = commands
         .spawn((Node {
             flex_grow: 1.0,
             ..default()
         },))
         .id();
-    commands.entity(toolbar).add_child(spacer_left);
-
-    for (label, active) in [
-        ("2D", true),
-        ("3D", false),
-        ("Script", false),
-        ("Game", false),
-        ("AssetLib", false),
-    ] {
-        let color = if active {
-            theme.colors.accent
-        } else {
-            theme.colors.text
-        };
-        let item = commands
-            .spawn((
-                Node {
-                    height: Val::Px(theme.sizes.btn_height),
-                    padding: UiRect::horizontal(Val::Px(12.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    border_radius: BorderRadius::all(Val::Px(theme.sizes.corner_radius)),
-                    ..default()
-                },
-                BackgroundColor(Color::NONE),
-                ContextSwitchItem,
-            ))
-            .id();
-        commands.entity(toolbar).add_child(item);
-
-        let text = commands
-            .spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: FontSize::from(theme.sizes.heading_size),
-                    ..default()
-                },
-                TextColor(color),
-            ))
-            .id();
-        commands.entity(item).add_child(text);
-    }
-
-    let spacer_right = commands
-        .spawn((Node {
-            flex_grow: 1.0,
-            ..default()
-        },))
-        .id();
-    commands.entity(toolbar).add_child(spacer_right);
+    commands.entity(toolbar).add_child(spacer);
 
     let play_btn = spawn_toolbar_button(
         commands,
@@ -151,56 +93,6 @@ pub fn spawn_toolbar(commands: &mut Commands, parent: Entity, theme: &EditorThem
         theme,
     );
     commands.entity(build_btn).insert(BuildButton);
-
-    let sep = commands
-        .spawn((
-            Node {
-                width: Val::Px(1.0),
-                height: Val::Px(22.0),
-                margin: UiRect::horizontal(Val::Px(8.0)),
-                ..default()
-            },
-            BackgroundColor(theme.colors.separator),
-        ))
-        .id();
-    commands.entity(toolbar).add_child(sep);
-
-    let status_row = commands
-        .spawn((Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            ..default()
-        },))
-        .id();
-    commands.entity(toolbar).add_child(status_row);
-
-    let dot = commands
-        .spawn((
-            Node {
-                width: Val::Px(8.0),
-                height: Val::Px(8.0),
-                margin: UiRect::right(Val::Px(6.0)),
-                border_radius: BorderRadius::all(Val::Px(4.0)),
-                ..default()
-            },
-            BackgroundColor(theme.colors.text_faint),
-            StatusDot,
-        ))
-        .id();
-    commands.entity(status_row).add_child(dot);
-
-    let status_text = commands
-        .spawn((
-            Text::new("Loading…"),
-            TextFont {
-                font_size: FontSize::from(theme.sizes.heading_size),
-                ..default()
-            },
-            TextColor(theme.colors.text_dim),
-            StatusText,
-        ))
-        .id();
-    commands.entity(status_row).add_child(status_text);
 }
 
 fn spawn_toolbar_button(
@@ -276,22 +168,17 @@ pub fn toolbar_interaction_system(
     }
 }
 
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+#[allow(clippy::type_complexity)]
 pub fn toolbar_sync_system(
     mut play_btns: Query<
         (&mut BackgroundColor, &Children),
-        (With<PlayButton>, Without<BuildButton>, Without<StatusDot>),
+        (With<PlayButton>, Without<BuildButton>),
     >,
     mut build_btns: Query<
         (&mut BackgroundColor, &Children),
-        (With<BuildButton>, Without<PlayButton>, Without<StatusDot>),
+        (With<BuildButton>, Without<PlayButton>),
     >,
-    mut status_dots: Query<
-        &mut BackgroundColor,
-        (With<StatusDot>, Without<PlayButton>, Without<BuildButton>),
-    >,
-    mut status_texts: Query<&mut Text, With<StatusText>>,
-    mut texts: Query<&mut Text, Without<StatusText>>,
+    mut texts: Query<&mut Text>,
     engine_state: Res<State<EngineState>>,
     build_state: Res<BuildState>,
     theme: Res<EditorTheme>,
@@ -325,19 +212,5 @@ pub fn toolbar_sync_system(
                 text.0 = "❖ Build".to_string();
             }
         }
-    }
-
-    let (dot_color, status_label) = match engine_state.get() {
-        EngineState::Loading => (theme.colors.text_faint, "Loading…"),
-        EngineState::Editing => (theme.colors.accent, "Editing"),
-        EngineState::Running => (theme.colors.stop, "Running"),
-    };
-
-    for mut dot_bg in status_dots.iter_mut() {
-        dot_bg.0 = dot_color;
-    }
-
-    for mut text in status_texts.iter_mut() {
-        text.0 = status_label.to_string();
     }
 }
