@@ -6,6 +6,7 @@ use bevy::prelude::*;
 
 use super::dock_tree::PanelId;
 use super::editor_state::{EditorState, FileTreeNode};
+use super::fields::{self, FilterInput};
 use super::panel::EditorPanel;
 use super::theme::EditorTheme;
 
@@ -183,22 +184,14 @@ pub fn spawn_file_system_panel(
         .id();
     commands.entity(filter_row).add_child(filter_box);
 
-    for (label, color) in [
-        ("Filter Files", theme.colors.text_faint),
-        ("\u{25CB}", theme.colors.text_dim),
-    ] {
-        let text = commands
-            .spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: FontSize::from(theme.sizes.heading_size - 1.0),
-                    ..default()
-                },
-                TextColor(color),
-            ))
-            .id();
-        commands.entity(filter_box).add_child(text);
-    }
+    fields::add_filter_input(
+        commands,
+        theme,
+        filter_box,
+        "Filter Files",
+        theme.sizes.heading_size - 1.0,
+        FilterInput::Files,
+    );
 
     commands.entity(parent).add_child(content);
     commands.entity(content).add_child(breadcrumb);
@@ -213,11 +206,13 @@ pub fn update_file_system_panel(world: &mut World) {
     let theme: EditorTheme;
     let expanded: ExpandedDirs;
     let selected: FileSystemSelection;
+    let filter: String;
     {
         file_tree = world.resource::<EditorState>().file_tree.clone();
         theme = world.resource::<EditorTheme>().clone();
         expanded = world.resource::<ExpandedDirs>().clone();
         selected = world.resource::<FileSystemSelection>().clone();
+        filter = world.resource::<EditorState>().file_filter.clone();
     }
 
     let containers: Vec<Entity> = {
@@ -225,7 +220,7 @@ pub fn update_file_system_panel(world: &mut World) {
         q.iter(world).map(|r| r.rows_container).collect()
     };
 
-    let visible = build_visible_rows(&file_tree, &expanded);
+    let visible = build_visible_rows(&file_tree, &expanded, &filter);
 
     for rows_container in containers {
         let existing = collect_existing_rows(world, rows_container);
@@ -252,10 +247,34 @@ struct VisibleRow {
     has_children: bool,
 }
 
-fn build_visible_rows(nodes: &[FileTreeNode], expanded: &ExpandedDirs) -> Vec<VisibleRow> {
+fn build_visible_rows(
+    nodes: &[FileTreeNode],
+    expanded: &ExpandedDirs,
+    filter: &str,
+) -> Vec<VisibleRow> {
     let mut out = Vec::new();
-    push_visible(nodes, 0, expanded, &mut out);
+    let needle = filter.trim().to_lowercase();
+    if needle.is_empty() {
+        push_visible(nodes, 0, expanded, &mut out);
+    } else {
+        push_matching(nodes, &needle, &mut out);
+    }
     out
+}
+
+fn push_matching(nodes: &[FileTreeNode], needle: &str, out: &mut Vec<VisibleRow>) {
+    for node in nodes {
+        if node.name.to_lowercase().contains(needle) {
+            out.push(VisibleRow {
+                path: node.path.clone(),
+                name: node.name.clone(),
+                depth: 0,
+                is_dir: node.is_dir,
+                has_children: false,
+            });
+        }
+        push_matching(&node.children, needle, out);
+    }
 }
 
 fn push_visible(

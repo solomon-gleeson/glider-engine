@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
+use bevy::clipboard::Clipboard;
 use bevy::prelude::*;
 
+use super::editor_state::EditorState;
+use super::fields::{self, FilterInput};
 use super::panel::EditorPanel;
 use super::theme::EditorTheme;
 use crate::editor::dock_tree::PanelId;
-use crate::instance::{ConsoleLevel, ScriptConsole};
+use crate::instance::{ConsoleLevel, ConsoleLine, ScriptConsole};
 
 #[derive(Component)]
 pub struct ConsoleContainer;
@@ -23,6 +26,12 @@ pub struct ConsoleToolbar;
 
 #[derive(Component)]
 pub struct ConsoleFilterField;
+
+#[derive(Component, Clone, Copy)]
+pub enum ConsoleAction {
+    Copy,
+    Clear,
+}
 
 pub fn spawn_console_panel(commands: &mut Commands, parent: Entity, theme: &EditorTheme) -> Entity {
     let container = commands
@@ -75,25 +84,17 @@ pub fn spawn_console_panel(commands: &mut Commands, parent: Entity, theme: &Edit
         .id();
     commands.entity(toolbar).add_child(filter_box);
 
-    for (label, color) in [
-        ("Filter Messages", theme.colors.text_faint),
-        ("\u{25CB}", theme.colors.text_dim),
-    ] {
-        let text = commands
-            .spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: FontSize::from(theme.sizes.heading_size - 1.0),
-                    ..default()
-                },
-                TextColor(color),
-            ))
-            .id();
-        commands.entity(filter_box).add_child(text);
-    }
+    fields::add_filter_input(
+        commands,
+        theme,
+        filter_box,
+        "Filter Messages",
+        theme.sizes.heading_size - 1.0,
+        FilterInput::Console,
+    );
 
-    for label in ["Copy", "Clear"] {
-        let action = commands
+    for (label, action) in [("Copy", ConsoleAction::Copy), ("Clear", ConsoleAction::Clear)] {
+        let btn = commands
             .spawn((
                 Node {
                     padding: UiRect::horizontal(Val::Px(8.0)),
@@ -107,9 +108,12 @@ pub fn spawn_console_panel(commands: &mut Commands, parent: Entity, theme: &Edit
                     ..default()
                 },
                 TextColor(theme.colors.text_dim),
+                Button,
+                Interaction::None,
+                action,
             ))
             .id();
-        commands.entity(toolbar).add_child(action);
+        commands.entity(toolbar).add_child(btn);
     }
 
     let empty = commands
@@ -177,10 +181,37 @@ fn spawn_line_node(
     commands.entity(row).add_child(line);
 }
 
+pub fn console_action_system(
+    actions: Query<(&ConsoleAction, &Interaction), Changed<Interaction>>,
+    mut console: ResMut<ScriptConsole>,
+    mut clipboard: ResMut<Clipboard>,
+) {
+    for (action, interaction) in actions.iter() {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        match action {
+            ConsoleAction::Copy => {
+                let text = console
+                    .lines
+                    .iter()
+                    .map(|l| l.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if let Err(e) = clipboard.set_text(text) {
+                    warn!("Copy to clipboard failed: {e:?}");
+                }
+            }
+            ConsoleAction::Clear => console.clear(),
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn update_console_panel(
     mut commands: Commands,
     console: Res<ScriptConsole>,
+    state: Res<EditorState>,
     theme: Option<Res<EditorTheme>>,
     containers: Query<Entity, With<ConsoleContainer>>,
     line_markers: Query<(Entity, &ConsoleLineMarker)>,
@@ -189,7 +220,13 @@ pub fn update_console_panel(
     children_q: Query<&Children>,
 ) {
     let Some(theme) = theme else { return };
-    let lines = &console.lines;
+    let needle = state.console_filter.trim().to_lowercase();
+    let lines: Vec<&ConsoleLine> = console
+        .lines
+        .iter()
+        .filter(|l| needle.is_empty() || l.text.to_lowercase().contains(&needle))
+        .collect();
+    let lines = &lines;
 
     for container in containers.iter() {
         let mut scoped_lines: Vec<Entity> = Vec::new();

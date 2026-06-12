@@ -1,25 +1,32 @@
 #![allow(dead_code)]
 
+use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
+use bevy::text::{EditableText, EditableTextFilter, TextEditChange};
 
 use super::editor_state::EditorState;
+use super::fields::{self, FilterInput};
 use super::theme::EditorTheme;
 use crate::instance::Instance;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PropKind {
+    Name,
+    PosX,
+    PosY,
+    SizeW,
+    SizeH,
+    Rotation,
+}
+
 #[derive(Component)]
-pub struct PropNameText;
+pub struct PropField(pub PropKind);
+
+#[derive(Component)]
+pub struct PropRow(pub &'static str);
+
 #[derive(Component)]
 pub struct PropClassText;
-#[derive(Component)]
-pub struct PropPosXText;
-#[derive(Component)]
-pub struct PropPosYText;
-#[derive(Component)]
-pub struct PropSizeWText;
-#[derive(Component)]
-pub struct PropSizeHText;
-#[derive(Component)]
-pub struct PropRotationText;
 
 #[derive(Component)]
 pub struct PropColorRect;
@@ -57,8 +64,8 @@ pub fn spawn_properties_panel(commands: &mut Commands, parent: Entity, theme: &E
         .id();
     commands.entity(parent).add_child(root);
 
-    commands.entity(root).with_children(|p| {
-        p.spawn((
+    let filter_field = commands
+        .spawn((
             Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
@@ -72,25 +79,16 @@ pub fn spawn_properties_panel(commands: &mut Commands, parent: Entity, theme: &E
             BackgroundColor(field_bg),
             PropFilterField,
         ))
-        .with_children(|f| {
-            f.spawn((
-                Text::new("Filter Properties"),
-                TextFont {
-                    font_size: FontSize::Px(value_size),
-                    ..default()
-                },
-                TextColor(text_faint),
-            ));
-            f.spawn((
-                Text::new("\u{25CB}"),
-                TextFont {
-                    font_size: FontSize::Px(value_size),
-                    ..default()
-                },
-                TextColor(text_dim),
-            ));
-        });
-    });
+        .id();
+    commands.entity(root).add_child(filter_field);
+    fields::add_filter_input(
+        commands,
+        theme,
+        filter_field,
+        "Filter Properties",
+        value_size,
+        FilterInput::Properties,
+    );
 
     commands.entity(root).with_children(|p| {
         p.spawn((
@@ -144,28 +142,10 @@ pub fn spawn_properties_panel(commands: &mut Commands, parent: Entity, theme: &E
         .id();
     commands.entity(root).add_child(rows_id);
 
-    spawn_label_value_row(
-        commands,
-        rows_id,
-        "Name",
-        "",
-        text_dim,
-        text,
-        field_bg,
-        value_size,
-        PropNameText,
+    spawn_input_row(
+        commands, theme, rows_id, "Name", PropKind::Name, false, value_size,
     );
-    spawn_label_value_row(
-        commands,
-        rows_id,
-        "Class",
-        "",
-        text_dim,
-        text,
-        field_bg,
-        value_size,
-        PropClassText,
-    );
+    spawn_class_row(commands, rows_id, text_dim, text, field_bg, value_size);
 
     let sep = commands
         .spawn((
@@ -180,77 +160,40 @@ pub fn spawn_properties_panel(commands: &mut Commands, parent: Entity, theme: &E
         .id();
     commands.entity(rows_id).add_child(sep);
 
-    spawn_label_value_row(
-        commands,
-        rows_id,
-        "Position X",
-        "0.0",
-        text_dim,
-        text,
-        field_bg,
-        value_size,
-        PropPosXText,
+    spawn_input_row(
+        commands, theme, rows_id, "Position X", PropKind::PosX, true, value_size,
     );
-    spawn_label_value_row(
-        commands,
-        rows_id,
-        "Position Y",
-        "0.0",
-        text_dim,
-        text,
-        field_bg,
-        value_size,
-        PropPosYText,
+    spawn_input_row(
+        commands, theme, rows_id, "Position Y", PropKind::PosY, true, value_size,
     );
-    spawn_label_value_row(
-        commands,
-        rows_id,
-        "Width",
-        "0.0",
-        text_dim,
-        text,
-        field_bg,
-        value_size,
-        PropSizeWText,
+    spawn_input_row(
+        commands, theme, rows_id, "Width", PropKind::SizeW, true, value_size,
     );
-    spawn_label_value_row(
-        commands,
-        rows_id,
-        "Height",
-        "0.0",
-        text_dim,
-        text,
-        field_bg,
-        value_size,
-        PropSizeHText,
+    spawn_input_row(
+        commands, theme, rows_id, "Height", PropKind::SizeH, true, value_size,
     );
-    spawn_label_value_row(
-        commands,
-        rows_id,
-        "Rotation",
-        "0\u{00B0}",
-        text_dim,
-        text,
-        field_bg,
-        value_size,
-        PropRotationText,
+    spawn_input_row(
+        commands, theme, rows_id, "Rotation", PropKind::Rotation, true, value_size,
     );
 
     let color_row = commands
-        .spawn((Node {
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(8.0),
-            margin: UiRect::vertical(Val::Px(2.0)),
-            ..default()
-        },))
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(8.0),
+                margin: UiRect::vertical(Val::Px(2.0)),
+                ..default()
+            },
+            PropRow("Colour"),
+        ))
         .id();
     commands.entity(rows_id).add_child(color_row);
 
     let color_label = commands
         .spawn((
-            Text::new("Color"),
+            Text::new("Colour"),
             TextFont {
                 font_size: FontSize::Px(value_size),
                 ..default()
@@ -281,33 +224,32 @@ pub fn spawn_properties_panel(commands: &mut Commands, parent: Entity, theme: &E
     commands.entity(color_row).add_child(color_swatch);
 }
 
-#[allow(clippy::too_many_arguments)]
-fn spawn_label_value_row<M: Component>(
+fn spawn_class_row(
     commands: &mut Commands,
     parent: Entity,
-    label: &str,
-    initial_value: &str,
     label_color: Color,
     value_color: Color,
     field_bg: Color,
     font_size: f32,
-    value_marker: M,
 ) {
     let row = commands
-        .spawn((Node {
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(8.0),
-            margin: UiRect::vertical(Val::Px(2.0)),
-            ..default()
-        },))
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(8.0),
+                margin: UiRect::vertical(Val::Px(2.0)),
+                ..default()
+            },
+            PropRow("Class"),
+        ))
         .id();
     commands.entity(parent).add_child(row);
 
     let label_entity = commands
         .spawn((
-            Text::new(label),
+            Text::new("Class"),
             TextFont {
                 font_size: FontSize::Px(font_size),
                 ..default()
@@ -338,145 +280,260 @@ fn spawn_label_value_row<M: Component>(
 
     let value_entity = commands
         .spawn((
-            Text::new(initial_value),
+            Text::new(""),
             TextFont {
                 font_size: FontSize::Px(font_size),
                 ..default()
             },
             TextColor(value_color),
-            value_marker,
+            PropClassText,
         ))
         .id();
     commands.entity(value_box).add_child(value_entity);
 }
 
-#[allow(clippy::too_many_arguments)]
-#[allow(clippy::type_complexity)]
+fn spawn_input_row(
+    commands: &mut Commands,
+    theme: &EditorTheme,
+    parent: Entity,
+    label: &'static str,
+    kind: PropKind,
+    numeric: bool,
+    font_size: f32,
+) {
+    let row = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(8.0),
+                margin: UiRect::vertical(Val::Px(2.0)),
+                ..default()
+            },
+            PropRow(label),
+        ))
+        .id();
+    commands.entity(parent).add_child(row);
+
+    let label_entity = commands
+        .spawn((
+            Text::new(label),
+            TextFont {
+                font_size: FontSize::Px(font_size),
+                ..default()
+            },
+            TextColor(theme.colors.text_dim),
+            Node {
+                width: Val::Px(96.0),
+                flex_shrink: 0.0,
+                ..default()
+            },
+        ))
+        .id();
+    commands.entity(row).add_child(label_entity);
+
+    let value_box = commands
+        .spawn((
+            Node {
+                flex_grow: 1.0,
+                padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(2.0), Val::Px(2.0)),
+                align_items: AlignItems::Center,
+                border_radius: BorderRadius::all(Val::Px(3.0)),
+                ..default()
+            },
+            BackgroundColor(theme.colors.field_bg),
+        ))
+        .id();
+    commands.entity(row).add_child(value_box);
+
+    let input = fields::spawn_text_input(commands, theme, "", font_size);
+    commands.entity(input).insert(PropField(kind));
+    if numeric {
+        commands.entity(input).insert(EditableTextFilter::new(|c| {
+            c.is_ascii_digit() || c == '-' || c == '.'
+        }));
+    }
+    commands.entity(value_box).add_child(input);
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn update_properties_panel(
     state: Res<EditorState>,
+    focus: Option<Res<InputFocus>>,
     instances: Query<&Instance>,
     transforms: Query<&Transform>,
     sprites: Query<&Sprite>,
     mut color_rect: Query<&mut BackgroundColor, With<PropColorRect>>,
-    mut rows_node: Query<&mut Node, With<PropRowsContainer>>,
-    mut text_set: ParamSet<(
-        Query<&mut Text, With<PropNameText>>,
-        Query<&mut Text, With<PropClassText>>,
-        Query<&mut Text, With<PropPosXText>>,
-        Query<&mut Text, With<PropPosYText>>,
-        Query<&mut Text, With<PropSizeWText>>,
-        Query<&mut Text, With<PropSizeHText>>,
-        Query<&mut Text, With<PropRotationText>>,
-        Query<&mut Text, With<PropEmptyMessage>>,
-    )>,
+    mut rows_container: Query<&mut Node, (With<PropRowsContainer>, Without<PropRow>)>,
+    mut rows: Query<(&PropRow, &mut Node), Without<PropRowsContainer>>,
+    mut fields_q: Query<(Entity, &PropField, &mut EditableText)>,
+    mut class_text: Query<&mut Text, (With<PropClassText>, Without<PropEmptyMessage>)>,
+    mut empty_msg: Query<&mut Text, (With<PropEmptyMessage>, Without<PropClassText>)>,
 ) {
-    let Some(entity) = state.selected_entity else {
-        set_empty(&mut text_set.p7(), &mut rows_node, "No entity selected");
+    let focused = focus.and_then(|f| f.get());
+
+    let needle = state.prop_filter.trim().to_lowercase();
+    for (row, mut node) in rows.iter_mut() {
+        let target = if needle.is_empty() || row.0.to_lowercase().contains(&needle) {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if node.display != target {
+            node.display = target;
+        }
+    }
+
+    let selected = state
+        .selected_entity
+        .and_then(|e| instances.get(e).ok().map(|i| (e, i)));
+
+    let Some((entity, inst)) = selected else {
+        let msg = if state.selected_entity.is_some() {
+            "Selected entity has no Instance component"
+        } else {
+            "No entity selected"
+        };
+        if let Ok(mut n) = rows_container.single_mut() {
+            n.display = Display::None;
+        }
+        if let Ok(mut t) = empty_msg.single_mut()
+            && t.0 != msg
+        {
+            t.0 = msg.to_string();
+        }
         return;
     };
 
-    let Ok(inst) = instances.get(entity) else {
-        set_empty(
-            &mut text_set.p7(),
-            &mut rows_node,
-            "Selected entity has no Instance component",
-        );
-        return;
-    };
-
-    if let Ok(mut n) = rows_node.single_mut() {
+    if let Ok(mut n) = rows_container.single_mut() {
         n.display = Display::Flex;
     }
-    if let Ok(mut t) = text_set.p7().single_mut() {
+    if let Ok(mut t) = empty_msg.single_mut()
+        && !t.0.is_empty()
+    {
         t.0 = String::new();
     }
 
-    if let Ok(mut t) = text_set.p0().single_mut() {
-        t.0 = inst.name.clone();
-    }
-    if let Ok(mut t) = text_set.p1().single_mut() {
+    if let Ok(mut t) = class_text.single_mut()
+        && t.0 != inst.class_name
+    {
         t.0 = inst.class_name.clone();
     }
 
-    let Ok(transform) = transforms.get(entity) else {
-        if let Ok(mut t) = text_set.p2().single_mut() {
-            t.0 = "\u{2014}".to_string();
-        }
-        if let Ok(mut t) = text_set.p3().single_mut() {
-            t.0 = "\u{2014}".to_string();
-        }
-        if let Ok(mut t) = text_set.p4().single_mut() {
-            t.0 = "\u{2014}".to_string();
-        }
-        if let Ok(mut t) = text_set.p5().single_mut() {
-            t.0 = "\u{2014}".to_string();
-        }
-        if let Ok(mut t) = text_set.p6().single_mut() {
-            t.0 = "\u{2014}".to_string();
-        }
-        if let Ok(mut c) = color_rect.single_mut() {
-            *c = BackgroundColor(Color::NONE);
-        }
-        return;
-    };
+    let transform = transforms.get(entity).ok();
+    let sprite = sprites.get(entity).ok();
+    let size = sprite.and_then(|s| s.custom_size);
 
-    if let Ok(mut t) = text_set.p2().single_mut() {
-        t.0 = fmt_f32(transform.translation.x);
-    }
-    if let Ok(mut t) = text_set.p3().single_mut() {
-        t.0 = fmt_f32(transform.translation.y);
-    }
-    let rot_deg = transform
-        .rotation
-        .to_euler(bevy::math::EulerRot::XYZ)
-        .2
-        .to_degrees();
-    if let Ok(mut t) = text_set.p6().single_mut() {
-        t.0 = format!("{rot_deg:.1}\u{00B0}");
+    for (field_entity, field, mut editable) in fields_q.iter_mut() {
+        if focused == Some(field_entity) {
+            continue;
+        }
+        let desired = match field.0 {
+            PropKind::Name => inst.name.clone(),
+            PropKind::PosX => transform
+                .map(|t| fmt_f32(t.translation.x))
+                .unwrap_or_default(),
+            PropKind::PosY => transform
+                .map(|t| fmt_f32(t.translation.y))
+                .unwrap_or_default(),
+            PropKind::SizeW => size.map(|s| fmt_f32(s.x)).unwrap_or_default(),
+            PropKind::SizeH => size.map(|s| fmt_f32(s.y)).unwrap_or_default(),
+            PropKind::Rotation => transform
+                .map(|t| fmt_f32(t.rotation.to_euler(EulerRot::XYZ).2.to_degrees()))
+                .unwrap_or_default(),
+        };
+        if fields::text_of(&editable) != desired {
+            editable.editor.set_text(&desired);
+        }
     }
 
-    if let Ok(sprite) = sprites.get(entity) {
-        if let Some(size) = sprite.custom_size {
-            if let Ok(mut t) = text_set.p4().single_mut() {
-                t.0 = fmt_f32(size.x);
-            }
-            if let Ok(mut t) = text_set.p5().single_mut() {
-                t.0 = fmt_f32(size.y);
-            }
-        } else {
-            if let Ok(mut t) = text_set.p4().single_mut() {
-                t.0 = "\u{2014}".to_string();
-            }
-            if let Ok(mut t) = text_set.p5().single_mut() {
-                t.0 = "\u{2014}".to_string();
-            }
-        }
-        if let Ok(mut c) = color_rect.single_mut() {
-            *c = BackgroundColor(sprite.color);
-        }
-    } else {
-        if let Ok(mut t) = text_set.p4().single_mut() {
-            t.0 = "\u{2014}".to_string();
-        }
-        if let Ok(mut t) = text_set.p5().single_mut() {
-            t.0 = "\u{2014}".to_string();
-        }
-        if let Ok(mut c) = color_rect.single_mut() {
-            *c = BackgroundColor(Color::NONE);
+    if let Ok(mut c) = color_rect.single_mut() {
+        let target = sprite.map(|s| s.color).unwrap_or(Color::NONE);
+        if c.0 != target {
+            *c = BackgroundColor(target);
         }
     }
 }
 
-fn set_empty(
-    empty_msg: &mut Query<&mut Text, With<PropEmptyMessage>>,
-    rows_node: &mut Query<&mut Node, With<PropRowsContainer>>,
-    msg: &str,
+pub fn on_prop_field_change(
+    event: On<TextEditChange>,
+    fields_q: Query<(&PropField, &EditableText)>,
+    mut state: ResMut<EditorState>,
+    mut transforms: Query<&mut Transform>,
+    mut sprites: Query<&mut Sprite>,
+    mut instances: Query<&mut Instance>,
 ) {
-    if let Ok(mut n) = rows_node.single_mut() {
-        n.display = Display::None;
+    let Ok((field, editable)) = fields_q.get(event.event_target()) else {
+        return;
+    };
+    let Some(entity) = state.selected_entity else {
+        return;
+    };
+    let value = fields::text_of(editable);
+    let value = value.trim();
+
+    if field.0 == PropKind::Name {
+        if !value.is_empty()
+            && let Ok(mut inst) = instances.get_mut(entity)
+            && inst.name != value
+        {
+            inst.name = value.to_string();
+        }
+        return;
     }
-    if let Ok(mut t) = empty_msg.single_mut() {
-        t.0 = msg.to_string();
+
+    let Ok(parsed) = value.parse::<f32>() else {
+        return;
+    };
+    if !parsed.is_finite() {
+        return;
+    }
+
+    match field.0 {
+        PropKind::PosX => {
+            state.pos_x = parsed;
+            if let Ok(mut t) = transforms.get_mut(entity) {
+                t.translation.x = parsed;
+            }
+        }
+        PropKind::PosY => {
+            state.pos_y = parsed;
+            if let Ok(mut t) = transforms.get_mut(entity) {
+                t.translation.y = parsed;
+            }
+        }
+        PropKind::Rotation => {
+            state.rotation = parsed;
+            if let Ok(mut t) = transforms.get_mut(entity) {
+                t.rotation = Quat::from_rotation_z(parsed.to_radians());
+            }
+        }
+        PropKind::SizeW => {
+            if parsed > 0.0 {
+                state.size_w = parsed;
+                if let Ok(mut s) = sprites.get_mut(entity) {
+                    let mut sz = s
+                        .custom_size
+                        .unwrap_or(Vec2::new(parsed, state.size_h.max(1.0)));
+                    sz.x = parsed;
+                    s.custom_size = Some(sz);
+                }
+            }
+        }
+        PropKind::SizeH => {
+            if parsed > 0.0 {
+                state.size_h = parsed;
+                if let Ok(mut s) = sprites.get_mut(entity) {
+                    let mut sz = s
+                        .custom_size
+                        .unwrap_or(Vec2::new(state.size_w.max(1.0), parsed));
+                    sz.y = parsed;
+                    s.custom_size = Some(sz);
+                }
+            }
+        }
+        PropKind::Name => {}
     }
 }
 
@@ -486,37 +543,5 @@ fn fmt_f32(v: f32) -> String {
         format!("{}", rounded as i64)
     } else {
         format!("{rounded:.2}")
-    }
-}
-
-pub fn apply_property_edits(
-    state: Res<EditorState>,
-    mut transforms: Query<&mut Transform>,
-    mut sprites: Query<&mut Sprite>,
-) {
-    let Some(entity) = state.selected_entity else {
-        return;
-    };
-    if state.synced_entity != Some(entity) {
-        return;
-    }
-
-    if let Ok(mut transform) = transforms.get_mut(entity) {
-        transform.translation.x = state.pos_x;
-        transform.translation.y = state.pos_y;
-        transform.rotation = Quat::from_rotation_z(state.rotation.to_radians());
-    }
-
-    if let Ok(mut sprite) = sprites.get_mut(entity) {
-        sprite.color = Color::srgba(
-            state.color.to_srgba().red,
-            state.color.to_srgba().green,
-            state.color.to_srgba().blue,
-            state.color.to_srgba().alpha,
-        );
-        if let Some(size) = sprite.custom_size.as_mut() {
-            size.x = state.size_w;
-            size.y = state.size_h;
-        }
     }
 }

@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use super::dock_tree::PanelId;
 use super::editor_state::EditorState;
+use super::fields::{self, FilterInput};
 use super::panel::EditorPanel;
 use super::theme::EditorTheme;
 use crate::instance::{Instance, ReplicatedStorageRoot, ScriptSource, WorkspaceRoot};
@@ -209,22 +210,14 @@ fn spawn_filter_bar(commands: &mut Commands, theme: &EditorTheme) -> Entity {
         .id();
     commands.entity(bar).add_child(field);
 
-    for (label, color) in [
-        ("Filter: name", theme.colors.text_faint),
-        ("\u{25CB}", theme.colors.text_dim),
-    ] {
-        let text = commands
-            .spawn((
-                Text::new(label),
-                TextFont {
-                    font_size: FontSize::from(theme.sizes.heading_size - 1.0),
-                    ..default()
-                },
-                TextColor(color),
-            ))
-            .id();
-        commands.entity(field).add_child(text);
-    }
+    fields::add_filter_input(
+        commands,
+        theme,
+        field,
+        "Filter: name",
+        theme.sizes.heading_size - 1.0,
+        FilterInput::Scene,
+    );
 
     bar
 }
@@ -245,6 +238,7 @@ pub fn update_project_panel(world: &mut World) {
     let expanded: ExpandedNodes;
     let selected_entity: Option<Entity>;
     let selected_service: Option<String>;
+    let scene_filter: String;
     {
         workspace_root = world.resource::<WorkspaceRoot>().0;
         replicated_root = world.resource::<ReplicatedStorageRoot>().0;
@@ -252,9 +246,26 @@ pub fn update_project_panel(world: &mut World) {
         expanded = world.resource::<ExpandedNodes>().clone();
         selected_entity = world.resource::<EditorState>().selected_entity;
         selected_service = world.resource::<EditorState>().selected_service.clone();
+        scene_filter = world.resource::<EditorState>().scene_filter.clone();
     }
 
-    let desired = build_desired_rows(world, workspace_root, replicated_root);
+    let mut desired = build_desired_rows(world, workspace_root, replicated_root);
+
+    let needle = scene_filter.trim().to_lowercase();
+    if !needle.is_empty() {
+        desired.retain(|row| {
+            matches!(row.kind, TreeRowKind::Service { .. })
+                || row.name.to_lowercase().contains(&needle)
+        });
+        for row in &mut desired {
+            if matches!(row.kind, TreeRowKind::Service { .. }) {
+                row.has_children = false;
+            } else {
+                row.depth = 1;
+                row.has_children = false;
+            }
+        }
+    }
 
     let need_respawn = match world.entity(rows_container).get::<LastDesiredSignature>() {
         Some(prev) => !signature_matches(prev, &desired),
@@ -656,7 +667,6 @@ pub fn tree_row_click_system(
             } => {
                 state.selected_entity = Some(*inst_entity);
                 state.selected_service = None;
-                state.synced_entity = None;
             }
             TreeRowKind::Service {
                 class_name,
@@ -665,11 +675,9 @@ pub fn tree_row_click_system(
                 if let Some(b) = backing {
                     state.selected_entity = Some(*b);
                     state.selected_service = None;
-                    state.synced_entity = None;
                 } else {
                     state.selected_entity = None;
                     state.selected_service = Some(class_name.clone());
-                    state.synced_entity = None;
                 }
             }
         }

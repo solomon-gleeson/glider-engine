@@ -5,6 +5,7 @@ mod dock_layout;
 mod dock_tree;
 mod editor_state;
 mod editor_ui;
+mod fields;
 mod file_system_panel;
 mod game_view;
 mod icons;
@@ -24,7 +25,6 @@ pub use editor_state::{EditorState, FileTreeNode};
 
 use bevy::prelude::*;
 
-use crate::core::ecs::EngineState;
 use crate::editor::dock_tree::{DockNode, EditorLayout};
 use crate::editor::tab_bar::TabSelectedEvent;
 use crate::editor::theme::EditorTheme;
@@ -205,11 +205,9 @@ impl Plugin for EditorPlugin {
                     file_system_panel::file_tree_row_click_system,
                     dock_layout::update_split_sizes,
                     status_bar::update_status_bar,
+                    fields::update_placeholders,
+                    console_panel::console_action_system,
                 ),
-            )
-            .add_systems(
-                Update,
-                properties_panel::apply_property_edits.run_if(in_state(EngineState::Editing)),
             )
             .add_systems(Update, console_panel::update_console_panel)
             .add_systems(
@@ -242,6 +240,8 @@ impl Plugin for EditorPlugin {
                 ),
             )
             .add_observer(handle_tab_selected_event)
-            .add_observer(script_editor::on_text_edit_change);
+            .add_observer(script_editor::on_text_edit_change)
+            .add_observer(fields::on_filter_change)
+            .add_observer(properties_panel::on_prop_field_change);
     }
 }

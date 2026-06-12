@@ -642,7 +642,6 @@ pub fn viewport_interaction_system(
                     state.size_h = ent_size.y;
                     state.rotation = ent_angle.to_degrees();
                     state.selected_entity = Some(entity);
-                    state.synced_entity = None;
                     state.drag_pointer_origin = Some(world);
                     state.drag_obj_origin = Some(ent_center);
                     state.drag_screen_origin = Some(cursor);
@@ -650,7 +649,6 @@ pub fn viewport_interaction_system(
                     state.drag_size_origin = Some(ent_size);
                 } else if state.viewport_tool_mode == ViewportToolMode::Select {
                     state.selected_entity = None;
-                    state.synced_entity = None;
                 }
             }
         }
