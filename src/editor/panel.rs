@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use super::console_panel::ConsolePanel;
 use super::dock_tree::PanelId;
 use super::file_system_panel::FileSystemPanel;
+use super::hierarchy_panel::HierarchyPanel;
 use super::project_panel::ProjectPanel;
 use super::properties_panel;
 use super::theme::EditorTheme;
@@ -17,6 +18,7 @@ impl PanelId {
         match self {
             PanelId::Viewport => "Viewport",
             PanelId::Project => "Project",
+            PanelId::Hierarchy => "Hierarchy",
             PanelId::FileSystem => "FileSystem",
             PanelId::Inspector => "Inspector",
             PanelId::Console => "Console",
@@ -33,6 +35,7 @@ impl PanelId {
         vec![
             PanelId::Viewport,
             PanelId::Project,
+            PanelId::Hierarchy,
             PanelId::Inspector,
             PanelId::FileSystem,
             PanelId::Console,
@@ -261,6 +264,7 @@ pub fn create_default_panels() -> Vec<Box<dyn EditorPanel>> {
     vec![
         Box::new(ViewportPanel),
         Box::new(ProjectPanel),
+        Box::new(HierarchyPanel),
         Box::new(InspectorPanel),
         Box::new(FileSystemPanel),
         Box::new(ConsolePanel),

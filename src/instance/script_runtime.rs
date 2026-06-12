@@ -72,7 +72,7 @@ impl UserData for InstanceHandle {
 }
 
 #[allow(clippy::mut_from_ref)]
-fn world_from_lua(lua: &Lua) -> &mut World {
+pub(crate) fn world_from_lua(lua: &Lua) -> &mut World {
     let accessor = lua
         .app_data_ref::<WorldAccessor>()
         .expect("world accessed outside of a script call (no live WorldAccessor)");
@@ -201,6 +201,18 @@ impl ScriptRuntime {
             }
         });
     }
+
+    pub fn dispatch_scene_events(&self, world: &mut World) {
+        let events = world
+            .resource_mut::<crate::scenegraph::SceneGraph>()
+            .take_events();
+        if events.is_empty() {
+            return;
+        }
+        with_world(&self.lua, world, |lua| {
+            crate::scenegraph::luau::dispatch_events(lua, &events);
+        });
+    }
 }
 
 fn with_world<R>(lua: &Lua, world: &mut World, f: impl FnOnce(&Lua) -> R) -> R {
@@ -233,6 +245,8 @@ fn install_api(lua: &Lua) {
         .unwrap();
     instance.set("new", new_fn).unwrap();
     globals.set("Instance", instance).unwrap();
+
+    crate::scenegraph::luau::install_scene_api(lua);
 
     globals
         .set(

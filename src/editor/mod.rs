@@ -8,6 +8,7 @@ mod editor_ui;
 mod fields;
 mod file_system_panel;
 mod game_view;
+mod hierarchy_panel;
 mod icons;
 mod panel;
 mod persistence;
@@ -181,6 +182,8 @@ impl Plugin for EditorPlugin {
             .init_resource::<panel::PanelRegistry>()
             .init_resource::<file_system_panel::ExpandedDirs>()
             .init_resource::<file_system_panel::FileSystemSelection>()
+            .init_resource::<hierarchy_panel::HierarchyCollapsed>()
+            .init_resource::<hierarchy_panel::HierarchyDrag>()
             .add_systems(
                 Startup,
                 (
@@ -210,6 +213,15 @@ impl Plugin for EditorPlugin {
                 ),
             )
             .add_systems(Update, console_panel::update_console_panel)
+            .add_systems(
+                Update,
+                (
+                    hierarchy_panel::update_hierarchy_panel_system,
+                    hierarchy_panel::hierarchy_interaction_system,
+                    hierarchy_panel::hierarchy_row_visuals_system,
+                )
+                    .chain(),
+            )
             .add_systems(
                 Update,
                 (

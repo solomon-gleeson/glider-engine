@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub enum PanelId {
     Viewport,
     Project,
+    Hierarchy,
     FileSystem,
     Inspector,
     Console,
@@ -107,6 +108,31 @@ impl DockNode {
             DockNode::Tabs { .. } => {}
         }
     }
+
+    pub fn contains_tab(&self, id: PanelId) -> bool {
+        match self {
+            DockNode::Split { first, second, .. } => {
+                first.contains_tab(id) || second.contains_tab(id)
+            }
+            DockNode::Tabs { tabs, .. } => tabs.contains(&id),
+        }
+    }
+
+    pub fn add_tab_beside(&mut self, anchor: PanelId, new: PanelId) -> bool {
+        match self {
+            DockNode::Split { first, second, .. } => {
+                first.add_tab_beside(anchor, new) || second.add_tab_beside(anchor, new)
+            }
+            DockNode::Tabs { tabs, .. } => {
+                if tabs.contains(&anchor) && !tabs.contains(&new) {
+                    tabs.push(new);
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
 }
 
 #[derive(Resource, Default, Serialize, Deserialize)]
@@ -172,7 +198,7 @@ impl Default for EditorLayout {
         let left_dock = DockNode::split(
             SplitDirection::Vertical,
             0.55,
-            DockNode::tabs(vec![PanelId::Project], 0),
+            DockNode::tabs(vec![PanelId::Project, PanelId::Hierarchy], 0),
             DockNode::tabs(vec![PanelId::FileSystem], 0),
         );
 

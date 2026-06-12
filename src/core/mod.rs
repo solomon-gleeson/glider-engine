@@ -40,6 +40,7 @@ pub fn run() {
     App::new()
         .add_plugins((
             crate::instance::InstancePlugin,
+            crate::scenegraph::SceneGraphPlugin,
             #[cfg(feature = "render")]
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {

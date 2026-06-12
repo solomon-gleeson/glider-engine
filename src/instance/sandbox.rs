@@ -100,6 +100,7 @@ pub fn runtime_script_update(world: &mut World) {
 
     if let Some(runtime) = world.remove_non_send::<ScriptRuntime>() {
         runtime.update_scripts(world, dt);
+        runtime.dispatch_scene_events(world);
         world.insert_non_send(runtime);
     }
 }

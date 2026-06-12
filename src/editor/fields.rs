@@ -12,6 +12,7 @@ pub enum FilterInput {
     Console,
     Files,
     Scene,
+    Hierarchy,
 }
 
 #[derive(Component)]
@@ -113,6 +114,7 @@ pub fn on_filter_change(
         FilterInput::Console => state.console_filter = value,
         FilterInput::Files => state.file_filter = value,
         FilterInput::Scene => state.scene_filter = value,
+        FilterInput::Hierarchy => state.hierarchy_filter = value,
     }
 }
 

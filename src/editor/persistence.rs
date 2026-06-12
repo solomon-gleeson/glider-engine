@@ -37,7 +37,7 @@ pub fn load_layout_system(mut layout: ResMut<EditorLayout>) {
         Err(_) => return,
     };
 
-    let loaded = match ron::from_str::<EditorLayout>(&text) {
+    let mut loaded = match ron::from_str::<EditorLayout>(&text) {
         Ok(layout) => {
             info!("Loaded editor layout from {LAYOUT_PATH}");
             layout
@@ -47,6 +47,14 @@ pub fn load_layout_system(mut layout: ResMut<EditorLayout>) {
             return;
         }
     };
+
+    use super::dock_tree::PanelId;
+    if !loaded.dock_tree.root.contains_tab(PanelId::Hierarchy) {
+        loaded
+            .dock_tree
+            .root
+            .add_tab_beside(PanelId::Project, PanelId::Hierarchy);
+    }
 
     *layout.bypass_change_detection() = loaded;
 }
