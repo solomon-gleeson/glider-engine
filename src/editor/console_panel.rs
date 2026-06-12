@@ -252,7 +252,7 @@ pub fn update_console_panel(
 
         if scoped_lines.len() != lines.len() {
             for entity in &scoped_lines {
-                commands.entity(*entity).despawn();
+                commands.entity(*entity).try_despawn();
             }
             for (idx, line) in lines.iter().enumerate() {
                 let color = line_color(&theme, line.level);
@@ -270,7 +270,7 @@ pub fn update_console_panel(
         let contiguous = indexed.iter().enumerate().all(|(i, (_, idx))| *idx == i);
         if !contiguous {
             for entity in &scoped_lines {
-                commands.entity(*entity).despawn();
+                commands.entity(*entity).try_despawn();
             }
             for (idx, line) in lines.iter().enumerate() {
                 let color = line_color(&theme, line.level);

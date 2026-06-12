@@ -319,7 +319,7 @@ pub fn update_hierarchy_panel_system(world: &mut World) {
             .unwrap_or_default();
         for e in to_despawn {
             if let Ok(mut ec) = world.commands().get_entity(e) {
-                ec.despawn();
+                ec.try_despawn();
             }
         }
 

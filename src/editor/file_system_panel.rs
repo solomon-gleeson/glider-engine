@@ -141,18 +141,6 @@ pub fn spawn_file_system_panel(
         .id();
     commands.entity(breadcrumb).add_child(path_box);
 
-    let path_text = commands
-        .spawn((
-            Text::new("res://"),
-            TextFont {
-                font_size: FontSize::from(theme.sizes.heading_size - 1.0),
-                ..default()
-            },
-            TextColor(theme.colors.text),
-        ))
-        .id();
-    commands.entity(path_box).add_child(path_text);
-
     let filter_row = commands
         .spawn((
             Node {
@@ -368,7 +356,7 @@ fn despawn_all_rows(world: &mut World, rows_container: Entity) {
         .unwrap_or_default();
     for e in to_despawn {
         if let Ok(mut ec) = world.commands().get_entity(e) {
-            ec.despawn();
+            ec.try_despawn();
         }
     }
 }
@@ -600,7 +588,9 @@ pub fn file_tree_row_click_system(
             .map(|prev| now - prev.time < DOUBLE_CLICK_S)
             .unwrap_or(false);
 
-        commands.entity(entity).insert(LastClickTime { time: now });
+        if let Ok(mut ec) = commands.get_entity(entity) {
+            ec.try_insert(LastClickTime { time: now });
+        }
 
         if is_double_click {
             if row.is_dir {

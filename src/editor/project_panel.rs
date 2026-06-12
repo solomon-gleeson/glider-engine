@@ -394,7 +394,7 @@ fn despawn_all_rows(world: &mut World, rows_container: Entity) {
         .unwrap_or_default();
     for e in to_despawn {
         if let Ok(mut ec) = world.commands().get_entity(e) {
-            ec.despawn();
+            ec.try_despawn();
         }
     }
 }
@@ -443,7 +443,7 @@ fn spawn_row_tree(
         if hidden.contains(&i)
             && let Ok(mut ec) = commands.get_entity(entity)
         {
-            ec.despawn();
+            ec.try_despawn();
         }
     }
 }

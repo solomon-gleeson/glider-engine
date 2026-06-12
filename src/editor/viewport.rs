@@ -474,7 +474,7 @@ pub fn viewport_tab_system(
 
         if let Ok(children) = children_query.get(tab_bar_entity) {
             for child in children.iter() {
-                commands.entity(child).despawn();
+                commands.entity(child).try_despawn();
             }
         }
 
@@ -742,7 +742,7 @@ pub fn update_viewport_panel_system(
 
         if let Ok(children) = children_query.get(content_entity) {
             for child in children.iter() {
-                commands.entity(child).despawn();
+                commands.entity(child).try_despawn();
             }
         }
 
